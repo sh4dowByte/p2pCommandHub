@@ -22,6 +22,9 @@ if [ -f "$CONFIG_PATH" ]; then
   fi
 fi
 
+# Strip trailing slash from SERVER_URL if present
+SERVER_URL="${SERVER_URL%/}"
+
 # Set up Persistent Agent ID
 ID_FILE="${HOME}/.p2p_bash_agent_id"
 if [ -f "$ID_FILE" ]; then
