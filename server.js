@@ -6,8 +6,8 @@ const path = require('path');
 
 // Load configurations
 let CONFIG = {
-  port: 3000,
-  secret_token: "p2p_secure_agent_token_2026"
+  secret_token: "p2p_secure_agent_token_2026",
+  server_url: ""
 };
 
 try {
@@ -273,7 +273,6 @@ app.post('/api/agent/response', (req, res) => {
 // Get configuration settings
 app.get('/api/config', (req, res) => {
   return res.json({
-    port: CONFIG.port || 3000,
     serverUrl: CONFIG.server_url || '',
     secretToken: CONFIG.secret_token || ''
   });
@@ -281,15 +280,19 @@ app.get('/api/config', (req, res) => {
 
 // Update configuration settings
 app.post('/api/config', (req, res) => {
-  const { serverUrl, secretToken, port } = req.body;
+  const { serverUrl, secretToken } = req.body;
   
   if (serverUrl !== undefined) CONFIG.server_url = serverUrl.trim();
   if (secretToken !== undefined) CONFIG.secret_token = secretToken.trim();
-  if (port !== undefined) CONFIG.port = parseInt(port, 10) || 3000;
+  
+  const configToSave = {
+    secret_token: CONFIG.secret_token,
+    server_url: CONFIG.server_url
+  };
   
   try {
-    fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(CONFIG, null, 2), 'utf8');
-    console.log('Server configuration updated:', CONFIG);
+    fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(configToSave, null, 2), 'utf8');
+    console.log('Server configuration updated:', configToSave);
     return res.json({ status: 'success', message: 'Configuration saved successfully.' });
   } catch (err) {
     console.error('Failed to save config:', err);
@@ -502,7 +505,7 @@ io.on('connection', (socket) => {
 });
 
 // Start Server
-const PORT = CONFIG.port || 3000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`================================================`);
   console.log(`  P2P Command Management Server is running      `);

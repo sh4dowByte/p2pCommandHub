@@ -978,7 +978,6 @@ const btnCancelSettings = document.getElementById('btn-cancel-settings');
 const btnSaveSettings = document.getElementById('btn-save-settings');
 const settingsServerUrl = document.getElementById('settings-server-url');
 const settingsSecretToken = document.getElementById('settings-secret-token');
-const settingsPort = document.getElementById('settings-port');
 
 async function loadSettings() {
   try {
@@ -986,7 +985,6 @@ async function loadSettings() {
     const config = await res.json();
     settingsServerUrl.value = config.serverUrl || '';
     settingsSecretToken.value = config.secretToken || '';
-    settingsPort.value = config.port || 3000;
   } catch (err) {
     console.error('Failed to load settings:', err);
   }
@@ -1015,8 +1013,7 @@ btnSaveSettings.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serverUrl: settingsServerUrl.value.trim(),
-        secretToken: settingsSecretToken.value.trim(),
-        port: parseInt(settingsPort.value, 10) || 3000
+        secretToken: settingsSecretToken.value.trim()
       })
     });
 
