@@ -1,0 +1,5 @@
+{
+  "port": 3000,
+  "secret_token": "p2p_secure_agent_token_2026",
+  "server_url": "http://192.168.120.187:3000"
+}

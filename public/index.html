@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P Remote CLI Control Panel</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tailwind CSS: We use Vanilla CSS, see styles.css -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Ace Editor -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- Marked.js -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Sidebar: Agents List -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <i data-lucide="terminal" class="logo-icon"></i>
+          <span>P2P Command Hub</span>
+        </div>
+        <div class="system-status">
+          <span class="status-dot online animate-pulse"></span>
+          <span class="status-text">Server Online</span>
+        </div>
+      </div>
+
+      <div class="agents-section">
+        <div class="section-title">
+          <span>Connected Agents</span>
+          <span class="badge" id="agent-count">0</span>
+        </div>
+        <div class="agent-list" id="agents-container">
+          <!-- Live agents injected here -->
+          <div class="no-agents">
+            <i data-lucide="wifi-off"></i>
+            <p>No agents connected yet</p>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <button id="btn-add-agent-modal" class="btn btn-secondary btn-full">
+          <i data-lucide="plus"></i> Add New Agent
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="main-content">
+      
+      <!-- Top Bar / Agent Header -->
+      <header class="top-bar">
+        <div class="active-agent-info" id="selected-agent-details">
+          <h1 id="selected-hostname">Select an Agent</h1>
+          <div class="agent-meta-tags" id="selected-agent-tags">
+            <!-- Details tag injected here -->
+            <span class="tag placeholder-tag">Connect an agent to start remote shell execution</span>
+          </div>
+        </div>
+        
+        <div class="global-actions">
+          <button id="btn-broadcast-mode" class="btn btn-secondary">
+            <i data-lucide="layers"></i>
+            Broadcast Command
+          </button>
+          <button id="btn-settings-modal" class="btn btn-secondary" title="Global Settings">
+            <i data-lucide="settings"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Agent Overview / Visual Metrics (Only visible if an agent is selected) -->
+      <section class="metrics-panel hidden" id="metrics-panel">
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>CPU Usage</span>
+            <i data-lucide="cpu" class="metric-icon"></i>
+          </div>
+          <div class="metric-body">
+            <div class="progress-bar-container">
+              <div class="progress-bar" id="cpu-progress" style="width: 0%"></div>
+            </div>
+            <span class="metric-value" id="cpu-value">0%</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>RAM Usage</span>
+            <i data-lucide="database" class="metric-icon"></i>
+          </div>
+          <div class="metric-body">
+            <div class="progress-bar-container">
+              <div class="progress-bar" id="ram-progress" style="width: 0%"></div>
+            </div>
+            <span class="metric-value" id="ram-value">0%</span>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>Platform Detail</span>
+            <i data-lucide="monitor" class="metric-icon"></i>
+          </div>
+          <div class="metric-body">
+            <span class="platform-text" id="platform-text">-</span>
+            <span class="ip-text" id="ip-text">0.0.0.0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Command Console Interface -->
+      <section class="console-section" id="console-section">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+          </div>
+          
+          <div class="terminal-tabs">
+            <button class="terminal-tab active" id="tab-btn-terminal">
+              <i data-lucide="terminal" style="width:14px;height:14px;"></i> Terminal
+            </button>
+            <button class="terminal-tab" id="tab-btn-files">
+              <i data-lucide="folder" style="width:14px;height:14px;"></i> File Browser
+            </button>
+          </div>
+
+          <div class="terminal-actions">
+            <button id="btn-clear-terminal" class="btn-icon-only" title="Clear Terminal">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal Tab Content -->
+        <div id="terminal-tab-content" class="tab-pane">
+          <div class="terminal-body" id="terminal-screen">
+            <div class="terminal-line system-msg">
+              <span class="prompt">system:</span> Welcome to P2P Remote CLI. Select a client from the left pane or click "Broadcast Command" to execute commands.
+            </div>
+          </div>
+
+          <div class="terminal-input-container">
+            <span class="terminal-input-prompt" id="input-prompt">$</span>
+            <input type="text" id="terminal-input" placeholder="Type command here..." disabled autocomplete="off">
+            <button id="btn-send-command" class="btn btn-primary" disabled>
+              <i data-lucide="send"></i>
+            </button>
+            <button id="btn-stop-command" class="btn btn-danger hidden" title="Stop Execution (Ctrl+C)">
+              <i data-lucide="x-octagon"></i> Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- File Browser Tab Content -->
+        <div id="file-browser-tab-content" class="tab-pane hidden">
+          <div class="fb-toolbar">
+            <button id="fb-btn-up" class="btn-icon-only" title="Go to parent directory">
+              <i data-lucide="arrow-up" style="width:16px;height:16px;"></i>
+            </button>
+            <button id="fb-btn-home" class="btn-icon-only" title="Go to home directory">
+              <i data-lucide="home" style="width:16px;height:16px;"></i>
+            </button>
+            <div class="fb-path-input-container">
+              <input type="text" id="fb-path-input" placeholder="Type directory path (e.g. /home/user or .)" autocomplete="off">
+            </div>
+            <button id="fb-btn-go" class="btn btn-secondary" title="Navigate to path">
+              Go
+            </button>
+            <button id="fb-btn-refresh" class="btn-icon-only" title="Refresh directory">
+              <i data-lucide="refresh-cw" style="width:16px;height:16px;"></i>
+            </button>
+          </div>
+
+          <div class="fb-files-table-container">
+            <table class="fb-files-table">
+              <thead>
+                <tr>
+                  <th class="col-name">Name</th>
+                  <th class="col-size">Size</th>
+                  <th class="col-mtime">Modified</th>
+                  <th class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fb-files-body">
+                <!-- Directory listing will be injected here -->
+              </tbody>
+            </table>
+
+            <div id="fb-loading" class="fb-loading-overlay hidden">
+              <div class="fb-spinner"></div>
+              <span>Loading files...</span>
+            </div>
+
+            <div id="fb-empty-state" class="fb-empty-state hidden">
+              <i data-lucide="folder-open" style="width:32px;height:32px;margin-bottom:8px;color:var(--text-muted);"></i>
+              <p>This directory is empty</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Broadcast Panel (Overlay Modal) -->
+      <div class="broadcast-modal-overlay hidden" id="broadcast-modal">
+        <div class="broadcast-card">
+          <div class="modal-header">
+            <h3><i data-lucide="layers" class="icon-inline"></i> Broadcast CLI Command</h3>
+            <button id="btn-close-broadcast" class="btn-icon-only"><i data-lucide="x"></i></button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-desc">Send a single CLI command to all connected agents concurrently. Results will stream in live below.</p>
+            
+            <div class="broadcast-input-group">
+              <input type="text" id="broadcast-input" placeholder="Enter command to broadcast (e.g. uptime, hostname)...">
+              <button id="btn-send-broadcast" class="btn btn-primary">
+                <i data-lucide="play"></i> Broadcast
+              </button>
+            </div>
+
+            <div class="broadcast-grid" id="broadcast-grid-results">
+              <!-- Result cards for each active agent will be rendered here -->
+              <div class="no-agents-modal">
+                No active targets to broadcast to.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Add Agent Modal (Overlay Modal) -->
+  <div class="broadcast-modal-overlay hidden" id="add-agent-modal">
+    <div class="broadcast-card add-agent-card">
+      <div class="modal-header">
+        <h3><i data-lucide="plus-circle" class="icon-inline"></i> Add New Agent</h3>
+        <button id="btn-close-add-agent" class="btn-icon-only"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc font-sm">Configure your server address and copy the one-liner command to instantly install the agent on your target server.</p>
+        
+        <!-- Host URL Input -->
+        <div class="form-group">
+          <label for="agent-server-host" class="form-label">Server Address URL</label>
+          <input type="text" id="agent-server-host" class="form-control" placeholder="http://192.168.1.10:3000">
+          <span class="form-help">Ensure remote clients can access this IP/domain. Defaults to this dashboard URL.</span>
+        </div>
+
+        <!-- Tabs Selector -->
+        <div class="agent-tabs-container">
+          <div class="agent-tabs">
+            <button class="tab-btn active" id="tab-btn-bash">Bash Client (Linux/macOS)</button>
+            <button class="tab-btn" id="tab-btn-python">Python Client (Cross-Platform)</button>
+          </div>
+
+          <!-- Bash Tab Content -->
+          <div class="tab-content" id="tab-content-bash">
+            <p class="tab-desc">Recommended for minimal Linux environments. Fetches and runs a lightweight background polling script.</p>
+            <div class="code-copy-container">
+              <textarea id="bash-install-cmd" readonly class="code-block"></textarea>
+              <button class="btn btn-primary btn-copy" id="btn-copy-bash">
+                <i data-lucide="copy" class="icon-sm"></i> Copy
+              </button>
+            </div>
+            <p class="tab-help">Paste this into your target server terminal to download, configure, and start the agent automatically.</p>
+          </div>
+
+          <!-- Python Tab Content -->
+          <div class="tab-content hidden" id="tab-content-python">
+            <p class="tab-desc">Recommended for full Windows/Linux/macOS systems. Enables live line-by-line output streaming.</p>
+            <div class="code-copy-container">
+              <textarea id="python-install-cmd" readonly class="code-block"></textarea>
+              <button class="btn btn-primary btn-copy" id="btn-copy-python">
+                <i data-lucide="copy" class="icon-sm"></i> Copy
+              </button>
+            </div>
+            <p class="tab-help">Paste this into your target system console. Downloads the client script, sets up socket dependencies, and runs the service.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Preview Modal (Overlay Modal) -->
+  <div class="broadcast-modal-overlay hidden" id="preview-modal">
+    <div class="broadcast-card preview-card">
+      <div class="modal-header">
+        <h3><i data-lucide="eye" class="icon-inline"></i> File Preview: <span id="preview-filename">file.txt</span></h3>
+        
+        <div class="preview-mode-toggle hidden" id="preview-toggle-container">
+          <button class="tab-btn active" id="btn-preview-mode-render">Rendered</button>
+          <button class="tab-btn" id="btn-preview-mode-code">Source Code</button>
+        </div>
+
+        <button id="btn-close-preview" class="btn-icon-only" title="Close Preview"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body preview-body-scroll">
+        <div id="preview-content" class="preview-content-area"></div>
+        <div id="preview-content-html" class="preview-content-area markdown-body hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal (Overlay Modal) -->
+  <div class="broadcast-modal-overlay hidden" id="settings-modal">
+    <div class="broadcast-card settings-card">
+      <div class="modal-header">
+        <h3><i data-lucide="settings" class="icon-inline"></i> Global Settings</h3>
+        <button id="btn-close-settings" class="btn-icon-only" title="Close"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc font-sm">Configure persistent server parameters. These settings are stored in the server's <code>config.json</code> file.</p>
+        
+        <div class="form-group">
+          <label for="settings-server-url" class="form-label">Persistent Server Host URL</label>
+          <input type="text" id="settings-server-url" class="form-control" placeholder="http://192.168.1.50:3000">
+          <span class="form-help">Sets the default host address for agent installer commands.</span>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="settings-secret-token" class="form-label">Secret Connection Token</label>
+          <input type="text" id="settings-secret-token" class="form-control">
+          <span class="form-help">Authentication key required by remote agents to establish connection.</span>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="settings-port" class="form-label">Server Listen Port</label>
+          <input type="number" id="settings-port" class="form-control">
+          <span class="form-help">Requires restarting the server process to take effect.</span>
+        </div>
+
+        <div class="settings-actions" style="display: flex; gap: 10px; margin-top: 24px;">
+          <button class="btn btn-primary" id="btn-save-settings" style="flex: 1;">Save Settings</button>
+          <button class="btn btn-secondary" id="btn-cancel-settings">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- App JS -->
+  <script src="app.js"></script>
+</body>
+</html>
