@@ -325,6 +325,16 @@ function selectAgent(agentId) {
   renderAgentsList();
   updateSelectedAgentData();
 
+  // Close sidebar on mobile after selection
+  const sidebarEl = document.querySelector('.sidebar');
+  const sidebarBackdropEl = document.getElementById('sidebar-backdrop');
+  if (sidebarEl && window.innerWidth <= 768) {
+    sidebarEl.classList.remove('open');
+    if (sidebarBackdropEl) {
+      sidebarBackdropEl.classList.add('hidden');
+    }
+  }
+
   // Load files for new agent if already on the Files tab
   if (activeTab === 'files') {
     const currentPath = agentPaths[selectedAgentId] || '.';
@@ -1036,4 +1046,19 @@ btnSaveSettings.addEventListener('click', async () => {
     btnSaveSettings.disabled = false;
   }
 });
+
+// Mobile Sidebar Toggle event listeners
+const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+const sidebar = document.querySelector('.sidebar');
+
+if (btnToggleSidebar && sidebar && sidebarBackdrop) {
+  const toggleSidebar = () => {
+    sidebar.classList.toggle('open');
+    sidebarBackdrop.classList.toggle('hidden');
+  };
+
+  btnToggleSidebar.addEventListener('click', toggleSidebar);
+  sidebarBackdrop.addEventListener('click', toggleSidebar);
+}
 

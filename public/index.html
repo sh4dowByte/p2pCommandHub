@@ -52,12 +52,16 @@
         </button>
       </div>
     </aside>
+    <div class="sidebar-backdrop hidden" id="sidebar-backdrop"></div>
 
     <!-- Main Workspace -->
     <main class="main-content">
       
       <!-- Top Bar / Agent Header -->
       <header class="top-bar">
+        <button id="btn-toggle-sidebar" class="btn-icon-only mobile-only" title="Toggle Sidebar" style="margin-right: 12px;">
+          <i data-lucide="menu"></i>
+        </button>
         <div class="active-agent-info" id="selected-agent-details">
           <h1 id="selected-hostname">Select an Agent</h1>
           <div class="agent-meta-tags" id="selected-agent-tags">
