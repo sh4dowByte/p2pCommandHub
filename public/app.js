@@ -632,9 +632,16 @@ function updateInstallerCommands() {
 }
 
 // Show/Hide Modal
-btnAddAgentModal.addEventListener('click', () => {
-  // Pre-fill server address with window's loaded location origin
-  agentServerHostInput.value = window.location.origin;
+btnAddAgentModal.addEventListener('click', async () => {
+  // Pre-fill server address with configured server_url or window's loaded location origin
+  try {
+    const res = await fetch('/api/config');
+    const config = await res.json();
+    agentServerHostInput.value = config.serverUrl || window.location.origin;
+  } catch (err) {
+    console.error('Failed to load server config for installer:', err);
+    agentServerHostInput.value = window.location.origin;
+  }
   updateInstallerCommands();
   addAgentModal.classList.remove('hidden');
 });
