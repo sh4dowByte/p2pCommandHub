@@ -22,24 +22,24 @@ except ImportError:
 
 # Configuration
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
-SERVER_URL = os.environ.get("SERVER_URL") or "http://localhost:3000"
-SECRET_TOKEN = os.environ.get("SECRET_TOKEN") or "p2p_secure_agent_token_2026"
-
-env_server_url = os.environ.get("SERVER_URL")
-env_secret_token = os.environ.get("SECRET_TOKEN")
+SERVER_URL = "http://localhost:3000"
+SECRET_TOKEN = "p2p_secure_agent_token_2026"
 
 if os.path.exists(CONFIG_PATH):
     try:
         with open(CONFIG_PATH, 'r') as f:
             config = json.load(f)
             port = config.get('port', 3000)
-            # Use server_url from config if present, otherwise default to localhost with port (unless overridden by env)
-            if not env_server_url:
-                SERVER_URL = config.get('server_url', f"http://localhost:{port}")
-            if not env_secret_token:
-                SECRET_TOKEN = config.get('secret_token', SECRET_TOKEN)
+            SERVER_URL = config.get('server_url', f"http://localhost:{port}")
+            SECRET_TOKEN = config.get('secret_token', SECRET_TOKEN)
     except Exception as e:
         print(f"Warning: Failed to parse config.json, using defaults. Error: {e}")
+
+# Environment overrides (e.g. for container connectivity)
+if os.environ.get("SERVER_URL"):
+    SERVER_URL = os.environ.get("SERVER_URL")
+if os.environ.get("SECRET_TOKEN"):
+    SECRET_TOKEN = os.environ.get("SECRET_TOKEN")
 
 # Initialize Socket.io Client
 sio = socketio.Client(reconnection=True, reconnection_attempts=0, reconnection_delay=5)
