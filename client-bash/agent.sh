@@ -3,7 +3,7 @@
 # Config
 SERVER_URL="http://localhost:3000"
 SECRET_TOKEN="p2p_secure_agent_token_2026"
-POLL_INTERVAL=3
+POLL_INTERVAL=1
 
 # Read local config.json if available
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -115,11 +115,36 @@ echo "=============================================="
 ACTIVE_CMD_ID=""
 ACTIVE_CMD_PID=""
 
+# Get static IP once at startup
+IP=$(get_ip)
+
+# Background metrics collector (runs every 10 seconds to avoid blocking the main loop)
+METRICS_FILE="/tmp/p2p_bash_metrics_${AGENT_ID}"
+echo "0.0 0.0" > "$METRICS_FILE"
+(
+  # Exit automatically if the parent process dies
+  while kill -0 $$ 2>/dev/null; do
+    CPU_VAL=$(get_cpu)
+    RAM_VAL=$(get_ram)
+    echo "$CPU_VAL $RAM_VAL" > "$METRICS_FILE"
+    sleep 10
+  done
+) &
+METRICS_PID=$!
+
+# Ensure background processes are cleaned up on exit
+cleanup() {
+  kill "$METRICS_PID" 2>/dev/null
+  rm -f "$METRICS_FILE"
+}
+trap cleanup EXIT INT TERM
+
 # Main Loop
 while true; do
-  IP=$(get_ip)
-  CPU=$(get_cpu)
-  RAM=$(get_ram)
+  # Read metrics from the background file instantly
+  read -r CPU RAM < "$METRICS_FILE" 2>/dev/null
+  [ -z "$CPU" ] && CPU="0.0"
+  [ -z "$RAM" ] && RAM="0.0"
 
   # URL encode parameters manually for curl compatibility
   POLL_URL="${SERVER_URL}/api/agent/poll?token=${SECRET_TOKEN}&id=${AGENT_ID}&hostname=${HOSTNAME}&platform=${PLATFORM}&ip=${IP}&cpu=${CPU}&ram=${RAM}"
@@ -127,6 +152,7 @@ while true; do
   # Connect to Server
   RESPONSE=$(curl -s -g "$POLL_URL")
   
+  SLEEP_TIME="$POLL_INTERVAL"
   if [ $? -eq 0 ] && [ -n "$RESPONSE" ]; then
     COMMAND_ID=$(parse_json_value "commandId" "$RESPONSE")
     CMD=$(parse_json_value "cmd" "$RESPONSE")
@@ -139,6 +165,8 @@ while true; do
         ACTIVE_CMD_ID=""
         ACTIVE_CMD_PID=""
       fi
+      # Poll again soon to acknowledge/reset state quickly
+      SLEEP_TIME=0.2
     elif [ -n "$COMMAND_ID" ] && [ "$COMMAND_ID" != "null" ]; then
       echo "Received command execution request: $CMD (ID: $COMMAND_ID)"
       
@@ -206,10 +234,14 @@ while true; do
         rm -f "$LOG_FILE"
         echo "Finished command ($COMMAND_ID) with exit code $EXIT_CODE"
       ) &
+      
+      # Poll again immediately to check if there are more queued commands
+      SLEEP_TIME=0.2
     fi
   else
-    echo "Connection to server failed. Retrying in ${POLL_INTERVAL} seconds..."
+    echo "Connection to server failed. Retrying in 5 seconds..."
+    SLEEP_TIME=5
   fi
 
-  sleep "$POLL_INTERVAL"
+  sleep "$SLEEP_TIME"
 done
