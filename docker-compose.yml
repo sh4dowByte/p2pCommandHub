@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   server:
     build:
@@ -12,16 +10,3 @@ services:
       - ./config.json:/app/config.json
     restart: unless-stopped
 
-  agent:
-    build:
-      context: ./client-python
-      dockerfile: Dockerfile
-    container_name: p2pcmd-python-agent
-    volumes:
-      - ./config.json:/app/config.json
-    environment:
-      - SERVER_URL=${SERVER_URL:-}
-      - SECRET_TOKEN=${SECRET_TOKEN:-}
-    depends_on:
-      - server
-    restart: unless-stopped
