@@ -627,8 +627,8 @@ function updateInstallerCommands() {
   serverHost = serverHost.replace(/\/+$/, "");
 
   // Update textareas
-  bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash | bash`;
-  pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]"  psutil --prefer-binary && python3 agent.py`;
+  bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && nohup ./agent.sh > /dev/null 2>&1 &`;
+  pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && nohup python3 agent.py > /dev/null 2>&1 &`;
 }
 
 // Show/Hide Modal
