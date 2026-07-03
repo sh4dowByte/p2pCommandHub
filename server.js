@@ -93,6 +93,7 @@ const agents = new Map(); // id -> agent data
 const bashCommandQueues = new Map(); // agentId -> array of { commandId, cmd }
 const activeCommands = new Map(); // commandId -> { agentId, dashboardSockets: Set }
 const pendingFileBrowse = new Map(); // commandId -> { socketId, type, path, chunks: [] }
+const pendingDockerList = new Map(); // commandId -> { socketId, chunks: [] }
 
 // Helper to cleanup stale Bash agents (e.g. no poll in 15 seconds)
 setInterval(() => {
@@ -120,6 +121,7 @@ function broadcastAgents() {
     type: a.type,
     status: a.status,
     metrics: a.metrics,
+    docker: a.docker,
     lastSeen: a.lastSeen
   }));
   io.to('dashboard').emit('agents-update', agentList);
@@ -165,7 +167,7 @@ app.get('/api/agent/poll', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { id, hostname, platform, ip, cpu, ram } = req.query;
+  const { id, hostname, platform, ip, cpu, ram, docker } = req.query;
   if (!id) {
     return res.status(400).json({ error: 'Missing client id' });
   }
@@ -187,6 +189,7 @@ app.get('/api/agent/poll', (req, res) => {
       cpu: parseFloat(cpu) || 0,
       ram: parseFloat(ram) || 0
     },
+    docker: docker || 'none',
     activeCommandId
   });
 
@@ -237,6 +240,8 @@ app.post('/api/agent/response', (req, res) => {
 
   // Intercept file browsing commands
   const isFb = pendingFileBrowse.has(commandId);
+  const isDocker = pendingDockerList.has(commandId);
+
   if (isFb) {
     const pending = pendingFileBrowse.get(commandId);
     if (output) {
@@ -311,6 +316,45 @@ app.post('/api/agent/response', (req, res) => {
               path: pending.path
             });
           }
+        }
+      }
+    }
+    return res.json({ status: 'ok' });
+  }
+
+  if (isDocker) {
+    const pending = pendingDockerList.get(commandId);
+    if (output) {
+      pending.chunks.push(output);
+    }
+
+    if (eof) {
+      pendingDockerList.delete(commandId);
+      const fullOutput = pending.chunks.join('');
+      const dashSocket = io.sockets.sockets.get(pending.socketId);
+      const parsedExitCode = exitCode !== undefined ? parseInt(exitCode, 10) : 0;
+
+      if (dashSocket) {
+        if (parsedExitCode !== 0) {
+          dashSocket.emit('docker-list-response', {
+            status: 'error',
+            message: `Failed to list Docker containers (Exit code: ${parsedExitCode})`
+          });
+        } else {
+          const lines = fullOutput.split('\n').filter(l => l.trim().length > 0);
+          const containers = lines.map(line => {
+            const parts = line.split('|');
+            return {
+              id: parts[0],
+              name: parts[1],
+              status: parts[2],
+              image: parts[3]
+            };
+          });
+          dashSocket.emit('docker-list-response', {
+            status: 'success',
+            containers
+          });
         }
       }
     }
@@ -452,6 +496,35 @@ io.on('connection', (socket) => {
       }
     });
 
+    socket.on('docker-list', ({ agentId }) => {
+      const agent = agents.get(agentId);
+      if (!agent || agent.status !== 'online') {
+        socket.emit('docker-list-response', { status: 'error', message: 'Agent is offline or does not exist.' });
+        return;
+      }
+
+      const commandId = 'docker_list_' + Math.random().toString(36).substring(2, 11);
+      pendingDockerList.set(commandId, { socketId: socket.id, chunks: [] });
+
+      const cmd = `docker ps -a --format "{{.ID}}|{{.Names}}|{{.Status}}|{{.Image}}"`;
+      
+      agent.activeCommandId = commandId;
+
+      if (agent.type === 'python') {
+        const agentSocket = io.sockets.sockets.get(agentId);
+        if (agentSocket) {
+          agentSocket.emit('run-command', { cmd, commandId });
+        } else {
+          socket.emit('docker-list-response', { status: 'error', message: 'Agent socket not found.' });
+        }
+      } else if (agent.type === 'bash') {
+        if (!bashCommandQueues.has(agentId)) {
+          bashCommandQueues.set(agentId, []);
+        }
+        bashCommandQueues.get(agentId).push({ commandId, cmd });
+      }
+    });
+
     // Handle command execution requests from dashboard
     socket.on('execute-command', ({ agentId, cmd }) => {
       const agent = agents.get(agentId);
@@ -529,7 +602,8 @@ io.on('connection', (socket) => {
       metrics: {
         cpu: metadata.cpu || 0,
         ram: metadata.ram || 0
-      }
+      },
+      docker: metadata.docker || 'none'
     });
 
     console.log(`Python agent registered: ${metadata.hostname} (${agentId})`);
@@ -543,6 +617,9 @@ io.on('connection', (socket) => {
         cpu: metrics.cpu || 0,
         ram: metrics.ram || 0
       };
+      if (metrics.docker) {
+        agent.docker = metrics.docker;
+      }
       agent.lastSeen = Date.now();
       broadcastAgents();
     }

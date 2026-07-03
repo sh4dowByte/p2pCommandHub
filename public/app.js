@@ -16,6 +16,21 @@ let agentPaths = {}; // agentId -> current path string
 let currentTheme = localStorage.getItem('theme') || 'dark'; // 'dark' | 'light'
 let fbViewMode = localStorage.getItem('fbViewMode') || 'list'; // 'list' | 'grid'
 
+// Terminal History
+let commandHistory = JSON.parse(localStorage.getItem('commandHistory') || '[]');
+let historyIndex = -1;
+
+// New Dashboard Settings (Client-side)
+let dashboardSettings = {
+  theme: currentTheme,
+  terminalFontSize: localStorage.getItem('terminalFontSize') || '14',
+  terminalFontFamily: localStorage.getItem('terminalFontFamily') || "'Fira Code', monospace",
+  terminalOpacity: localStorage.getItem('terminalOpacity') || '1',
+  soundEnabled: localStorage.getItem('soundEnabled') === 'true',
+  autoClear: localStorage.getItem('autoClear') === 'true',
+  historyLimit: localStorage.getItem('historyLimit') || '100'
+};
+
 // Apply theme on load
 if (currentTheme === 'light') {
   document.body.classList.add('light-mode');
@@ -46,6 +61,13 @@ const tabBtnTerminal = document.getElementById('tab-btn-terminal');
 const tabBtnFiles = document.getElementById('tab-btn-files');
 const terminalTabContent = document.getElementById('terminal-tab-content');
 const fileBrowserTabContent = document.getElementById('file-browser-tab-content');
+const tabBtnDocker = document.getElementById('tab-btn-docker');
+const dockerTabContent = document.getElementById('docker-tab-content');
+const dockerContainersBody = document.getElementById('docker-containers-body');
+const dockerBtnRefresh = document.getElementById('docker-btn-refresh');
+const dockerLoading = document.getElementById('docker-loading');
+const dockerEmptyState = document.getElementById('docker-empty-state');
+const dockerStatusText = document.getElementById('docker-status-text');
 
 // File Browser DOM Elements
 const fbBtnUp = document.getElementById('fb-btn-up');
@@ -163,14 +185,78 @@ function updateThemeUI() {
 
 btnThemeToggle.addEventListener('click', () => {
   currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  dashboardSettings.theme = currentTheme;
   localStorage.setItem('theme', currentTheme);
   updateThemeUI();
+  
+  // Sync select input if settings modal is open
+  if (settingsTheme) {
+    settingsTheme.value = currentTheme;
+  }
 });
 
 // Initial theme UI update
 updateThemeUI();
+
+// Apply initial dashboard settings
+function applyDashboardSettings() {
+  // Theme
+  currentTheme = dashboardSettings.theme;
+  updateThemeUI();
+  
+  // Terminal Font Size
+  terminalScreen.style.fontSize = `${dashboardSettings.terminalFontSize}px`;
+  
+  // Terminal Font Family
+  terminalScreen.style.fontFamily = dashboardSettings.terminalFontFamily;
+  
+  // Terminal Opacity
+  terminalScreen.style.opacity = dashboardSettings.terminalOpacity;
+  
+  // Ace Editor Preview Settings
+  if (typeof editor !== 'undefined') {
+    editor.setOptions({
+      fontSize: `${dashboardSettings.terminalFontSize}px`,
+      fontFamily: dashboardSettings.terminalFontFamily
+    });
+  }
+}
+applyDashboardSettings();
+
 const btnSendBroadcast = document.getElementById('btn-send-broadcast');
 const broadcastGridResults = document.getElementById('broadcast-grid-results');
+
+// Helper to play notification sound
+function playNotificationSound(type = 'connect') {
+  if (!dashboardSettings.soundEnabled) return;
+  
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    if (type === 'connect') {
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+      oscillator.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.1); // E6
+    } else {
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4
+      oscillator.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.2); // A3
+    }
+
+    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + 0.2);
+  } catch (err) {
+    console.warn('Sound playback failed:', err);
+  }
+}
 
 // Socket Events
 socket.on('connect', () => {
@@ -186,6 +272,15 @@ socket.on('file-browse-response', (response) => {
     renderFileList(response.items);
   } else {
     alert(`Error: ${response.message || 'Failed to list directory'}`);
+  }
+});
+
+socket.on('docker-list-response', (response) => {
+  showDockerLoading(false);
+  if (response.status === 'success') {
+    renderDockerList(response.containers);
+  } else {
+    alert(`Error: ${response.message || 'Failed to list Docker containers'}`);
   }
 });
 
@@ -287,6 +382,15 @@ socket.on('file-browse-download-response', (response) => {
 });
 
 socket.on('agents-update', (agents) => {
+  const oldOnlineCount = agentsList.filter(a => a.status === 'online').length;
+  const newOnlineCount = agents.filter(a => a.status === 'online').length;
+  
+  if (newOnlineCount > oldOnlineCount) {
+    playNotificationSound('connect');
+  } else if (newOnlineCount < oldOnlineCount) {
+    playNotificationSound('disconnect');
+  }
+
   agentsList = agents;
   renderAgentsList();
   updateSelectedAgentData();
@@ -433,6 +537,8 @@ function selectAgent(agentId) {
   if (activeTab === 'files') {
     const currentPath = agentPaths[selectedAgentId] || '.';
     fetchDirectoryContents(currentPath);
+  } else if (activeTab === 'docker') {
+    fetchDockerContainers();
   }
 }
 
@@ -466,6 +572,7 @@ function updateSelectedAgentData() {
   `;
 
   if (isOnline) {
+    console.log(`Agent ${agent.hostname} Docker Status:`, agent.docker);
     metricsPanel.classList.remove('hidden');
     tabBtnFiles.removeAttribute('disabled');
     // Update live metrics gauges
@@ -479,6 +586,19 @@ function updateSelectedAgentData() {
     // Enable input if not currently executing a command
     if (!currentCommandId) {
       setTerminalInputState(true);
+    }
+
+    // Show/Hide Docker tab
+    if (agent.docker && agent.docker !== 'none') {
+      tabBtnDocker.classList.remove('hidden');
+      dockerStatusText.textContent = agent.docker === 'connected' ? 'Docker Connected' : 'Docker Installed (Service Not Running)';
+      const dot = document.querySelector('.docker-status-indicator .status-dot');
+      if (dot) {
+        dot.className = `status-dot ${agent.docker === 'connected' ? 'online' : 'offline'}`;
+      }
+    } else {
+      tabBtnDocker.classList.add('hidden');
+      if (activeTab === 'docker') switchTab('terminal');
     }
   } else {
     metricsPanel.classList.add('hidden');
@@ -565,6 +685,22 @@ function submitCommand() {
     activeOutput.classList.remove('streaming-output');
   }
 
+  if (dashboardSettings.autoClear) {
+    terminalScreen.innerHTML = '';
+    appendTerminalLine('Terminal cleared (Auto-clear enabled).', 'system-msg');
+  }
+
+  // Save to history
+  if (cmd && (commandHistory.length === 0 || commandHistory[0] !== cmd)) {
+    commandHistory.unshift(cmd);
+    const limit = parseInt(dashboardSettings.historyLimit) || 100;
+    if (commandHistory.length > limit) {
+      commandHistory = commandHistory.slice(0, limit);
+    }
+    localStorage.setItem('commandHistory', JSON.stringify(commandHistory));
+  }
+  historyIndex = -1;
+
   socket.emit('execute-command', { agentId: selectedAgentId, cmd });
   terminalInput.value = '';
 }
@@ -573,6 +709,21 @@ function submitCommand() {
 terminalInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     submitCommand();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (historyIndex < commandHistory.length - 1) {
+      historyIndex++;
+      terminalInput.value = commandHistory[historyIndex];
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (historyIndex > 0) {
+      historyIndex--;
+      terminalInput.value = commandHistory[historyIndex];
+    } else if (historyIndex === 0) {
+      historyIndex = -1;
+      terminalInput.value = '';
+    }
   }
 });
 btnSendCommand.addEventListener('click', submitCommand);
@@ -815,26 +966,85 @@ btnCopyPython.addEventListener('click', () => {
 // File Browser Helpers and Listeners
 tabBtnTerminal.addEventListener('click', () => switchTab('terminal'));
 tabBtnFiles.addEventListener('click', () => switchTab('files'));
+tabBtnDocker.addEventListener('click', () => switchTab('docker'));
+
+dockerBtnRefresh.addEventListener('click', () => fetchDockerContainers());
 
 function switchTab(tab) {
   activeTab = tab;
-  if (tab === 'terminal') {
-    tabBtnTerminal.classList.add('active');
-    tabBtnFiles.classList.remove('active');
-    terminalTabContent.classList.remove('hidden');
-    fileBrowserTabContent.classList.add('hidden');
-    btnClearTerminal.classList.remove('hidden');
-  } else {
-    tabBtnFiles.classList.add('active');
-    tabBtnTerminal.classList.remove('active');
-    fileBrowserTabContent.classList.remove('hidden');
-    terminalTabContent.classList.add('hidden');
-    btnClearTerminal.classList.add('hidden');
+  
+  // Update Buttons
+  tabBtnTerminal.classList.toggle('active', tab === 'terminal');
+  tabBtnFiles.classList.toggle('active', tab === 'files');
+  tabBtnDocker.classList.toggle('active', tab === 'docker');
+  
+  // Update Content
+  terminalTabContent.classList.toggle('hidden', tab !== 'terminal');
+  fileBrowserTabContent.classList.toggle('hidden', tab !== 'files');
+  dockerTabContent.classList.toggle('hidden', tab !== 'docker');
+  
+  // Common visibility
+  btnClearTerminal.classList.toggle('hidden', tab !== 'terminal');
+  
+  if (tab === 'files' && selectedAgentId) {
+    const currentPath = agentPaths[selectedAgentId] || '.';
+    fetchDirectoryContents(currentPath);
+  } else if (tab === 'docker' && selectedAgentId) {
+    fetchDockerContainers();
+  }
+}
+
+function fetchDockerContainers() {
+  if (!selectedAgentId) return;
+  const agent = agentsList.find(a => a.id === selectedAgentId);
+  if (!agent || agent.docker !== 'connected') return;
+
+  showDockerLoading(true);
+  dockerContainersBody.innerHTML = '';
+  dockerEmptyState.classList.add('hidden');
+  
+  socket.emit('docker-list', { agentId: selectedAgentId });
+}
+
+function renderDockerList(containers) {
+  dockerContainersBody.innerHTML = '';
+  
+  if (!containers || containers.length === 0) {
+    dockerEmptyState.classList.remove('hidden');
+    return;
+  }
+  
+  dockerEmptyState.classList.add('hidden');
+  
+  containers.forEach(container => {
+    const tr = document.createElement('tr');
     
-    if (selectedAgentId) {
-      const currentPath = agentPaths[selectedAgentId] || '.';
-      fetchDirectoryContents(currentPath);
-    }
+    const isUp = container.status.toLowerCase().includes('up');
+    const statusClass = isUp ? 'up' : 'exited';
+    
+    tr.innerHTML = `
+      <td><span class="container-id">${container.id}</span></td>
+      <td><strong>${container.name}</strong></td>
+      <td><span class="container-status ${statusClass}">${container.status}</span></td>
+      <td><code style="font-size: 0.8rem; color: var(--text-muted);">${container.image}</code></td>
+      <td class="docker-actions-cell">
+        <button class="btn btn-secondary btn-sm" onclick="alert('Control features coming soon')">
+          <i data-lucide="play" class="icon-sm"></i>
+        </button>
+      </td>
+    `;
+    
+    dockerContainersBody.appendChild(tr);
+  });
+  
+  lucide.createIcons();
+}
+
+function showDockerLoading(show) {
+  if (show) {
+    dockerLoading.classList.remove('hidden');
+  } else {
+    dockerLoading.classList.add('hidden');
   }
 }
 
@@ -1161,6 +1371,41 @@ const settingsServerUrl = document.getElementById('settings-server-url');
 const settingsSecretToken = document.getElementById('settings-secret-token');
 const settingsDashboardPassword = document.getElementById('settings-dashboard-password');
 
+// New Settings UI Elements
+const settingsTabBtns = document.querySelectorAll('.settings-tab-btn');
+const settingsPanes = document.querySelectorAll('.settings-pane');
+
+// Appearance Form Elements
+const settingsTheme = document.getElementById('settings-theme');
+const settingsTerminalFontSize = document.getElementById('settings-terminal-font-size');
+const settingsTerminalFontFamily = document.getElementById('settings-terminal-font-family');
+const settingsTerminalOpacity = document.getElementById('settings-terminal-opacity');
+
+// Behavior Form Elements
+const settingsSoundEnabled = document.getElementById('settings-sound-enabled');
+const settingsAutoClear = document.getElementById('settings-auto-clear');
+const settingsHistoryLimit = document.getElementById('settings-history-limit');
+
+// Settings Tab Logic
+settingsTabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabId = btn.dataset.tab;
+    
+    // Update buttons
+    settingsTabBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Update panes
+    settingsPanes.forEach(pane => {
+      if (pane.id === tabId) {
+        pane.classList.remove('hidden');
+      } else {
+        pane.classList.add('hidden');
+      }
+    });
+  });
+});
+
 async function apiFetch(url, options = {}) {
   const response = await fetch(url, options);
   if (response.status === 401) {
@@ -1172,12 +1417,23 @@ async function apiFetch(url, options = {}) {
 
 async function loadSettings() {
   try {
+    // Load Server Settings
     const res = await apiFetch('/api/config');
     if (!res) return;
     const config = await res.json();
     settingsServerUrl.value = config.serverUrl || '';
     settingsSecretToken.value = config.secretToken || '';
     settingsDashboardPassword.value = ''; // Reset password field
+
+    // Load Client Settings into form
+    settingsTheme.value = dashboardSettings.theme;
+    settingsTerminalFontSize.value = dashboardSettings.terminalFontSize;
+    settingsTerminalFontFamily.value = dashboardSettings.terminalFontFamily;
+    settingsTerminalOpacity.value = dashboardSettings.terminalOpacity;
+    settingsSoundEnabled.checked = dashboardSettings.soundEnabled;
+    settingsAutoClear.checked = dashboardSettings.autoClear;
+    settingsHistoryLimit.value = dashboardSettings.historyLimit;
+    
   } catch (err) {
     console.error('Failed to load settings:', err);
   }
@@ -1201,6 +1457,7 @@ btnSaveSettings.addEventListener('click', async () => {
   btnSaveSettings.disabled = true;
 
   try {
+    // 1. Save Server Settings
     const res = await apiFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1213,7 +1470,28 @@ btnSaveSettings.addEventListener('click', async () => {
 
     if (!res) return;
     const result = await res.json();
+    
     if (result.status === 'success') {
+      // 2. Save Client Settings to dashboardSettings object and localStorage
+      dashboardSettings.theme = settingsTheme.value;
+      dashboardSettings.terminalFontSize = settingsTerminalFontSize.value;
+      dashboardSettings.terminalFontFamily = settingsTerminalFontFamily.value;
+      dashboardSettings.terminalOpacity = settingsTerminalOpacity.value;
+      dashboardSettings.soundEnabled = settingsSoundEnabled.checked;
+      dashboardSettings.autoClear = settingsAutoClear.checked;
+      dashboardSettings.historyLimit = settingsHistoryLimit.value;
+
+      localStorage.setItem('theme', dashboardSettings.theme);
+      localStorage.setItem('terminalFontSize', dashboardSettings.terminalFontSize);
+      localStorage.setItem('terminalFontFamily', dashboardSettings.terminalFontFamily);
+      localStorage.setItem('terminalOpacity', dashboardSettings.terminalOpacity);
+      localStorage.setItem('soundEnabled', dashboardSettings.soundEnabled);
+      localStorage.setItem('autoClear', dashboardSettings.autoClear);
+      localStorage.setItem('historyLimit', dashboardSettings.historyLimit);
+
+      // 3. Apply appearance changes instantly
+      applyDashboardSettings();
+
       btnSaveSettings.textContent = '✓ Saved!';
       setTimeout(() => {
         btnSaveSettings.textContent = 'Save Settings';

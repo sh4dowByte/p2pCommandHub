@@ -143,6 +143,9 @@
             <button class="terminal-tab" id="tab-btn-files">
               <i data-lucide="folder" style="width:14px;height:14px;"></i> File Browser
             </button>
+            <button class="terminal-tab hidden" id="tab-btn-docker">
+              <i data-lucide="container" style="width:14px;height:14px;"></i> Docker
+            </button>
           </div>
 
           <div class="terminal-actions">
@@ -227,6 +230,48 @@
           <div id="fb-loading" class="fb-loading-overlay hidden">
             <div class="fb-spinner"></div>
             <p>Fetching files...</p>
+          </div>
+        </div>
+
+        <!-- Docker Tab Content -->
+        <div id="docker-tab-content" class="tab-pane hidden">
+          <div class="docker-toolbar">
+            <div class="docker-status-indicator">
+              <span class="status-dot online"></span>
+              <span id="docker-status-text">Docker Connected</span>
+            </div>
+            <div class="docker-actions">
+              <button id="docker-btn-refresh" class="btn btn-secondary btn-sm">
+                <i data-lucide="refresh-cw" class="icon-sm"></i> Refresh
+              </button>
+            </div>
+          </div>
+          
+          <div class="docker-containers-container">
+            <table class="docker-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Image</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="docker-containers-body">
+                <!-- Docker containers will be injected here -->
+              </tbody>
+            </table>
+          </div>
+
+          <div id="docker-empty-state" class="fb-empty-state hidden">
+            <i data-lucide="package" style="width:48px;height:48px;margin-bottom:16px;opacity:0.2;"></i>
+            <p>No containers found</p>
+          </div>
+
+          <div id="docker-loading" class="fb-loading-overlay hidden">
+            <div class="fb-spinner"></div>
+            <p>Fetching containers...</p>
           </div>
         </div>
         </div>
@@ -338,31 +383,91 @@
   <div class="broadcast-modal-overlay hidden" id="settings-modal">
     <div class="broadcast-card settings-card">
       <div class="modal-header">
-        <h3><i data-lucide="settings" class="icon-inline"></i> Global Settings</h3>
+        <h3><i data-lucide="settings" class="icon-inline"></i> Settings</h3>
         <button id="btn-close-settings" class="btn-icon-only" title="Close"><i data-lucide="x"></i></button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc font-sm">Configure persistent server parameters. These settings are stored in the server's <code>config.json</code> file.</p>
-        
-        <div class="form-group">
-          <label for="settings-server-url" class="form-label">Persistent Server Host URL</label>
-          <input type="text" id="settings-server-url" class="form-control" placeholder="http://192.168.1.50:3000">
-          <span class="form-help">Sets the default host address for agent installer commands.</span>
+        <div class="settings-tabs">
+          <button class="settings-tab-btn active" data-tab="settings-server">Server</button>
+          <button class="settings-tab-btn" data-tab="settings-appearance">Appearance</button>
+          <button class="settings-tab-btn" data-tab="settings-behavior">Behavior</button>
         </div>
 
-        <div class="form-group" style="margin-top: 12px;">
-          <label for="settings-secret-token" class="form-label">Secret Connection Token</label>
-          <input type="text" id="settings-secret-token" class="form-control">
-          <span class="form-help">Authentication key required by remote agents to establish connection.</span>
+        <div id="settings-server" class="settings-pane">
+          <p class="modal-desc font-sm">Configure persistent server parameters.</p>
+          <div class="form-group">
+            <label for="settings-server-url" class="form-label">Persistent Server Host URL</label>
+            <input type="text" id="settings-server-url" class="form-control" placeholder="http://192.168.1.50:3000">
+            <span class="form-help">Sets the default host address for agent installer commands.</span>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="settings-secret-token" class="form-label">Secret Connection Token</label>
+            <input type="text" id="settings-secret-token" class="form-control">
+            <span class="form-help">Authentication key required by remote agents to establish connection.</span>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="settings-dashboard-password" class="form-label">Change Dashboard Password</label>
+            <input type="password" id="settings-dashboard-password" class="form-control" placeholder="Enter new password">
+            <span class="form-help">Leave blank to keep the current password.</span>
+          </div>
         </div>
 
-        <div class="form-group" style="margin-top: 12px;">
-          <label for="settings-dashboard-password" class="form-label">Change Dashboard Password</label>
-          <input type="password" id="settings-dashboard-password" class="form-control" placeholder="Enter new password">
-          <span class="form-help">Leave blank to keep the current password.</span>
+        <div id="settings-appearance" class="settings-pane hidden">
+          <p class="modal-desc font-sm">Customize the interface look and feel.</p>
+          
+          <div class="form-group">
+            <label for="settings-theme" class="form-label">Default Theme</label>
+            <select id="settings-theme" class="form-control">
+              <option value="dark">Dark Mode</option>
+              <option value="light">Light Mode</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="settings-terminal-font-size" class="form-label">Terminal Font Size (px)</label>
+            <input type="number" id="settings-terminal-font-size" class="form-control" min="10" max="24" value="14">
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="settings-terminal-font-family" class="form-label">Terminal Font Family</label>
+            <select id="settings-terminal-font-family" class="form-control">
+              <option value="'Fira Code', monospace">Fira Code</option>
+              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+              <option value="'Courier New', Courier, monospace">Courier New</option>
+              <option value="monospace">System Monospace</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="settings-terminal-opacity" class="form-label">Terminal Opacity</label>
+            <input type="range" id="settings-terminal-opacity" class="form-range" min="0.5" max="1" step="0.05" value="1">
+          </div>
         </div>
 
+        <div id="settings-behavior" class="settings-pane hidden">
+          <p class="modal-desc font-sm">Configure how the dashboard interacts with agents.</p>
+          
+          <div class="form-check-group" style="margin-top: 12px;">
+            <label class="form-check-label">
+              <input type="checkbox" id="settings-sound-enabled">
+              <span>Enable sound on agent connect/disconnect</span>
+            </label>
+          </div>
 
+          <div class="form-check-group" style="margin-top: 12px;">
+            <label class="form-check-label">
+              <input type="checkbox" id="settings-auto-clear">
+              <span>Auto-clear terminal when sending command</span>
+            </label>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label for="settings-history-limit" class="form-label">Command History Limit</label>
+            <input type="number" id="settings-history-limit" class="form-control" min="10" max="500" value="100">
+          </div>
+        </div>
 
         <div class="settings-actions" style="display: flex; gap: 10px; margin-top: 24px;">
           <button class="btn btn-primary" id="btn-save-settings" style="flex: 1;">Save Settings</button>

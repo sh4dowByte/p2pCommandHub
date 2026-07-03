@@ -68,6 +68,20 @@ def get_system_metrics():
             pass
     return {'cpu': 0.0, 'ram': 0.0}
 
+def check_docker():
+    try:
+        # Check if docker command exists
+        subprocess.run(['docker', '--version'], capture_output=True, check=True)
+        # Check if docker daemon is reachable
+        subprocess.run(['docker', 'ps'], capture_output=True, check=True)
+        return "connected"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        try:
+            subprocess.run(['docker', '--version'], capture_output=True, check=True)
+            return "installed"
+        except:
+            return "none"
+
 def get_metadata():
     metrics = get_system_metrics()
     return {
@@ -75,7 +89,8 @@ def get_metadata():
         'platform': f"{platform.system()} {platform.release()}",
         'ip': get_local_ip(),
         'cpu': metrics['cpu'],
-        'ram': metrics['ram']
+        'ram': metrics['ram'],
+        'docker': check_docker()
     }
 
 # Active command processes map (command_id -> subprocess.Popen)
@@ -247,6 +262,7 @@ def metrics_reporter_loop():
         if sio.connected:
             try:
                 metrics = get_system_metrics()
+                metrics['docker'] = check_docker()
                 sio.emit('metrics-update', metrics)
             except Exception as e:
                 print(f"Failed to report metrics: {e}")

@@ -94,6 +94,18 @@ get_ip() {
   echo "$ip"
 }
 
+check_docker() {
+  if command -v docker >/dev/null 2>&1; then
+    if docker ps >/dev/null 2>&1; then
+      echo "connected"
+    else
+      echo "installed"
+    fi
+  else
+    echo "none"
+  fi
+}
+
 # Extraction utility for string/number JSON values
 parse_json_value() {
   local key="$1"
@@ -147,7 +159,8 @@ while true; do
   [ -z "$RAM" ] && RAM="0.0"
 
   # URL encode parameters manually for curl compatibility
-  POLL_URL="${SERVER_URL}/api/agent/poll?token=${SECRET_TOKEN}&id=${AGENT_ID}&hostname=${HOSTNAME}&platform=${PLATFORM}&ip=${IP}&cpu=${CPU}&ram=${RAM}"
+  DOCKER_STATUS=$(check_docker)
+  POLL_URL="${SERVER_URL}/api/agent/poll?token=${SECRET_TOKEN}&id=${AGENT_ID}&hostname=${HOSTNAME}&platform=${PLATFORM}&ip=${IP}&cpu=${CPU}&ram=${RAM}&docker=${DOCKER_STATUS}"
   
   # Connect to Server
   RESPONSE=$(curl -s -g "$POLL_URL")
