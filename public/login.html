@@ -6,129 +6,140 @@
     <title>Login - P2P Command Hub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
     <style>
         body {
-            background: radial-gradient(circle at top right, #1e293b, #0f172a);
+            font-family: 'Outfit', sans-serif;
+            background: 
+                radial-gradient(at 0% 0%, var(--primary-glow) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(125, 163, 114, 0.03) 0px, transparent 50%),
+                var(--bg-primary);
             height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            transition: background-color 0.3s ease;
         }
         .login-card {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            padding: 40px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--border-color);
+            border-radius: 28px;
+            padding: 56px;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            animation: fadeIn 0.5s ease-out;
+            max-width: 440px;
+            box-shadow: var(--shadow-lg);
+            animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
+            from { opacity: 0; transform: translateY(40px); }
             to { opacity: 1; transform: translateY(0); }
         }
         .login-header {
             text-align: center;
-            margin-bottom: 32px;
+            margin-bottom: 40px;
         }
         .login-logo {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 64px;
-            height: 64px;
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            border-radius: 12px;
-            margin-bottom: 16px;
-            color: white;
-            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+            border-radius: 20px;
+            margin-bottom: 24px;
+            color: var(--bg-primary);
+            box-shadow: 0 12px 24px var(--primary-glow);
         }
         .login-title {
-            font-size: 24px;
+            font-size: 28px;
             font-weight: 700;
-            color: white;
-            margin-bottom: 8px;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            letter-spacing: -0.03em;
         }
         .login-subtitle {
-            font-size: 14px;
-            color: #94a3b8;
+            font-size: 15px;
+            color: var(--text-secondary);
         }
         .form-group {
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
         .form-label {
             display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #cbd5e1;
-            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
         }
         .form-input-container {
             position: relative;
         }
         .form-input-icon {
             position: absolute;
-            left: 12px;
+            left: 16px;
             top: 50%;
             transform: translateY(-50%);
-            color: #64748b;
+            color: var(--text-muted);
         }
         .form-control {
             width: 100%;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            padding: 12px 12px 12px 40px;
-            color: white;
+            background: var(--terminal-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 16px 16px 16px 48px;
+            color: var(--text-primary);
             font-size: 16px;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .form-control:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-            background: rgba(15, 23, 42, 0.8);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px var(--primary-glow);
+            background: var(--bg-secondary);
         }
         .btn-login {
             width: 100%;
-            background: #3b82f6;
-            color: white;
+            background: var(--primary);
+            color: var(--bg-primary);
             border: none;
-            border-radius: 8px;
-            padding: 12px;
+            border-radius: 14px;
+            padding: 16px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 12px;
+            box-shadow: 0 8px 16px var(--primary-glow);
         }
         .btn-login:hover {
-            background: #2563eb;
-            transform: translateY(-1px);
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px var(--primary-glow);
         }
         .btn-login:active {
             transform: translateY(0);
         }
         .error-msg {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: #fca5a5;
-            padding: 12px;
-            border-radius: 8px;
+            background: var(--error-glow);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 16px;
+            border-radius: 14px;
             font-size: 14px;
-            margin-bottom: 20px;
+            margin-bottom: 28px;
             display: none;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
         }
     </style>
 </head>
@@ -163,6 +174,12 @@
     </div>
 
     <script>
+        // Theme Detection
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        if (currentTheme === 'light') {
+            document.body.classList.add('light-mode');
+        }
+        
         lucide.createIcons();
         
         const form = document.getElementById('login-form');

@@ -13,6 +13,12 @@ let broadcastCommandIds = {}; // agentId -> commandId for active broadcast
 let commandOutputs = {}; // commandId -> string buffer of outputs
 let activeTab = 'terminal'; // 'terminal' | 'files'
 let agentPaths = {}; // agentId -> current path string
+let currentTheme = localStorage.getItem('theme') || 'dark'; // 'dark' | 'light'
+
+// Apply theme on load
+if (currentTheme === 'light') {
+  document.body.classList.add('light-mode');
+}
 
 // DOM Elements
 const agentsContainer = document.getElementById('agents-container');
@@ -31,6 +37,8 @@ const terminalInput = document.getElementById('terminal-input');
 const btnSendCommand = document.getElementById('btn-send-command');
 const btnClearTerminal = document.getElementById('btn-clear-terminal');
 const inputPrompt = document.getElementById('input-prompt');
+const btnThemeToggle = document.getElementById('btn-theme-toggle');
+const themeIcon = document.getElementById('theme-icon');
 
 // Tabs DOM Elements
 const tabBtnTerminal = document.getElementById('tab-btn-terminal');
@@ -42,6 +50,8 @@ const fileBrowserTabContent = document.getElementById('file-browser-tab-content'
 const fbBtnUp = document.getElementById('fb-btn-up');
 const fbBtnHome = document.getElementById('fb-btn-home');
 const fbPathInput = document.getElementById('fb-path-input');
+const fbBreadcrumbs = document.getElementById('fb-breadcrumbs');
+const fbPathContainer = document.querySelector('.fb-path-container');
 const fbBtnGo = document.getElementById('fb-btn-go');
 const fbBtnRefresh = document.getElementById('fb-btn-refresh');
 const fbFilesBody = document.getElementById('fb-files-body');
@@ -98,6 +108,32 @@ const btnBroadcastMode = document.getElementById('btn-broadcast-mode');
 const broadcastModal = document.getElementById('broadcast-modal');
 const btnCloseBroadcast = document.getElementById('btn-close-broadcast');
 const broadcastInput = document.getElementById('broadcast-input');
+
+// Theme Toggle Handler
+function updateThemeUI() {
+  if (currentTheme === 'light') {
+    document.body.classList.add('light-mode');
+    themeIcon.setAttribute('data-lucide', 'sun');
+    editor.setTheme("ace/theme/chrome");
+  } else {
+    document.body.classList.remove('light-mode');
+    themeIcon.setAttribute('data-lucide', 'moon');
+    editor.setTheme("ace/theme/tomorrow_night_eighties");
+  }
+  // Refresh Lucide icons for the theme toggle
+  if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+  }
+}
+
+btnThemeToggle.addEventListener('click', () => {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', currentTheme);
+  updateThemeUI();
+});
+
+// Initial theme UI update
+updateThemeUI();
 const btnSendBroadcast = document.getElementById('btn-send-broadcast');
 const broadcastGridResults = document.getElementById('broadcast-grid-results');
 
@@ -111,6 +147,7 @@ socket.on('file-browse-response', (response) => {
   if (response.status === 'success') {
     agentPaths[selectedAgentId] = response.path;
     fbPathInput.value = response.path;
+    renderBreadcrumbs(response.path);
     renderFileList(response.items);
   } else {
     alert(`Error: ${response.message || 'Failed to list directory'}`);
@@ -800,7 +837,18 @@ function renderFileList(items) {
     
     const actionHtml = item.isDir 
       ? '' 
-      : `<button class="btn btn-secondary btn-icon-only btn-preview-file" data-name="${item.name}" title="Preview file" style="margin-right: 6px;"><i data-lucide="eye" style="width:14px;height:14px;"></i></button><button class="btn btn-secondary btn-icon-only btn-download-file" data-name="${item.name}" title="Download file"><i data-lucide="download" style="width:14px;height:14px;"></i></button>`;
+      : `
+        <div class="fb-actions-group">
+          <button class="fb-action-btn btn-preview-file" data-name="${item.name}" title="Preview file">
+            <i data-lucide="eye"></i>
+            <span>Preview</span>
+          </button>
+          <button class="fb-action-btn btn-download-file" data-name="${item.name}" title="Download file">
+            <i data-lucide="download"></i>
+            <span>Get</span>
+          </button>
+        </div>
+      `;
       
     tr.innerHTML = `
       <td class="col-name">
@@ -1089,5 +1137,93 @@ if (btnToggleSidebar && sidebar && sidebarBackdrop) {
 
   btnToggleSidebar.addEventListener('click', toggleSidebar);
   sidebarBackdrop.addEventListener('click', toggleSidebar);
+}
+
+function renderBreadcrumbs(path) {
+  fbBreadcrumbs.innerHTML = '';
+  fbBreadcrumbs.classList.remove('hidden');
+  fbPathInput.classList.add('hidden');
+  
+  if (!path) return;
+  
+  // Handle both Windows and Linux separators
+  const isWindows = path.includes('\\') || /^[a-zA-Z]:/.test(path);
+  const sep = isWindows ? '\\' : '/';
+  
+  // Split path into parts, preserving the root/drive
+  let parts = path.split(sep).filter(p => p !== '');
+  let currentAccumulatedPath = '';
+  
+  // If it's a linux absolute path, add a root item
+  if (path.startsWith('/') && !isWindows) {
+    const rootItem = createBreadcrumbItem('/', '/');
+    fbBreadcrumbs.appendChild(rootItem);
+    currentAccumulatedPath = '/';
+  } else if (isWindows && path.length >= 2 && path[1] === ':') {
+    // Keep drive letter as a part if it's there
+  }
+  
+  parts.forEach((part, index) => {
+    if (fbBreadcrumbs.children.length > 0) {
+      const separator = document.createElement('span');
+      separator.className = 'breadcrumb-separator';
+      separator.textContent = sep;
+      fbBreadcrumbs.appendChild(separator);
+    }
+    
+    if (isWindows && index === 0 && part.includes(':')) {
+        currentAccumulatedPath = part;
+    } else {
+        if (currentAccumulatedPath && !currentAccumulatedPath.endsWith(sep)) {
+            currentAccumulatedPath += sep;
+        }
+        currentAccumulatedPath += part;
+    }
+    
+    const item = createBreadcrumbItem(part, currentAccumulatedPath);
+    fbBreadcrumbs.appendChild(item);
+  });
+}
+
+function createBreadcrumbItem(name, targetPath) {
+  const span = document.createElement('span');
+  span.className = 'breadcrumb-item';
+  span.textContent = name;
+  span.addEventListener('click', (e) => {
+    e.stopPropagation();
+    fetchDirectoryContents(targetPath);
+  });
+  return span;
+}
+
+// Click container to edit path manually
+if (fbPathContainer) {
+  fbPathContainer.addEventListener('click', () => {
+    fbBreadcrumbs.classList.add('hidden');
+    fbPathInput.classList.remove('hidden');
+    fbPathInput.focus();
+    fbPathInput.select();
+  });
+}
+
+// Blur or Enter to save path
+if (fbPathInput) {
+  fbPathInput.addEventListener('blur', () => {
+    setTimeout(() => {
+        if (fbPathInput.classList.contains('hidden')) return;
+        fbBreadcrumbs.classList.remove('hidden');
+        fbPathInput.classList.add('hidden');
+    }, 200);
+  });
+
+  fbPathInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      fetchDirectoryContents(fbPathInput.value);
+    } else if (e.key === 'Escape') {
+        fbBreadcrumbs.classList.remove('hidden');
+        fbPathInput.classList.add('hidden');
+        fbPathInput.value = agentPaths[selectedAgentId];
+    }
+  });
 }
 

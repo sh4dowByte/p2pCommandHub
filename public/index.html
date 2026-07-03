@@ -7,7 +7,7 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Tailwind CSS: We use Vanilla CSS, see styles.css -->
@@ -50,7 +50,7 @@
         <button id="btn-add-agent-modal" class="btn btn-secondary btn-full">
           <i data-lucide="plus"></i> Add New Agent
         </button>
-        <button id="btn-logout" class="btn btn-ghost btn-full" style="margin-top: 8px; color: var(--text-muted);">
+        <button id="btn-logout" class="btn btn-ghost btn-full" style="color: var(--text-muted);">
           <i data-lucide="log-out"></i> Logout
         </button>
       </div>
@@ -77,6 +77,9 @@
           <button id="btn-broadcast-mode" class="btn btn-secondary">
             <i data-lucide="layers"></i>
             Broadcast Command
+          </button>
+          <button id="btn-theme-toggle" class="btn btn-secondary" title="Toggle Light/Dark Mode">
+            <i data-lucide="moon" id="theme-icon"></i>
           </button>
           <button id="btn-settings-modal" class="btn btn-secondary" title="Global Settings">
             <i data-lucide="settings"></i>
@@ -178,8 +181,9 @@
             <button id="fb-btn-home" class="btn-icon-only" title="Go to home directory">
               <i data-lucide="home" style="width:16px;height:16px;"></i>
             </button>
-            <div class="fb-path-input-container">
-              <input type="text" id="fb-path-input" placeholder="Type directory path (e.g. /home/user or .)" autocomplete="off">
+            <div class="fb-path-container">
+              <div id="fb-breadcrumbs" class="fb-breadcrumbs"></div>
+              <input type="text" id="fb-path-input" class="hidden" placeholder="Type directory path..." autocomplete="off">
             </div>
             <button id="fb-btn-go" class="btn btn-secondary" title="Navigate to path">
               Go
@@ -203,17 +207,19 @@
                 <!-- Directory listing will be injected here -->
               </tbody>
             </table>
-
-            <div id="fb-loading" class="fb-loading-overlay hidden">
-              <div class="fb-spinner"></div>
-              <span>Loading files...</span>
-            </div>
-
-            <div id="fb-empty-state" class="fb-empty-state hidden">
-              <i data-lucide="folder-open" style="width:32px;height:32px;margin-bottom:8px;color:var(--text-muted);"></i>
-              <p>This directory is empty</p>
-            </div>
           </div>
+
+          <div id="fb-empty-state" class="fb-empty-state hidden">
+            <i data-lucide="folder-open" style="width:48px;height:48px;margin-bottom:16px;opacity:0.2;"></i>
+            <p>This directory is empty</p>
+          </div>
+
+          <!-- Loading Overlay covers the whole tab-pane -->
+          <div id="fb-loading" class="fb-loading-overlay hidden">
+            <div class="fb-spinner"></div>
+            <p>Fetching files...</p>
+          </div>
+        </div>
         </div>
       </section>
 
