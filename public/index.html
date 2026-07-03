@@ -191,9 +191,13 @@
             <button id="fb-btn-refresh" class="btn-icon-only" title="Refresh directory">
               <i data-lucide="refresh-cw" style="width:16px;height:16px;"></i>
             </button>
+            <div style="width: 1px; height: 20px; background-color: var(--border-color); margin: 0 8px;"></div>
+            <button id="fb-btn-view-toggle" class="btn-icon-only" title="Toggle Grid/List View">
+              <i data-lucide="layout-grid" id="fb-view-icon" style="width:16px;height:16px;"></i>
+            </button>
           </div>
 
-          <div class="fb-files-table-container">
+          <div class="fb-files-table-container" id="fb-table-view">
             <table class="fb-files-table">
               <thead>
                 <tr>
@@ -207,6 +211,11 @@
                 <!-- Directory listing will be injected here -->
               </tbody>
             </table>
+          </div>
+
+          <!-- Grid View Container -->
+          <div id="fb-grid-view" class="fb-files-grid hidden">
+            <!-- Grid items injected here -->
           </div>
 
           <div id="fb-empty-state" class="fb-empty-state hidden">

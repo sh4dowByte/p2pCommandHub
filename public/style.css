@@ -1167,6 +1167,121 @@ body {
   font-weight: 400;
 }
 
+/* Grid View Styles */
+.fb-files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.fb-grid-item {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  position: relative;
+  text-align: center;
+}
+
+.fb-grid-item:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.fb-grid-icon-wrapper {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-primary);
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+
+.fb-grid-icon-wrapper i {
+  width: 32px;
+  height: 32px;
+}
+
+.fb-grid-thumbnail {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+}
+
+.fb-grid-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fb-grid-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.fb-grid-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.fb-grid-item:hover .fb-grid-actions {
+  opacity: 1;
+}
+
+.fb-grid-action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fb-grid-action-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background-color: var(--bg-primary);
+}
+
+/* Extension-specific Icon Colors */
+.fb-icon-code { color: #818cf8; }
+.fb-icon-image { color: #f472b6; }
+.fb-icon-video { color: #fb7185; }
+.fb-icon-audio { color: #38bdf8; }
+.fb-icon-archive { color: #fbbf24; }
+.fb-icon-pdf { color: #f87171; }
+.fb-icon-sheet { color: #34d399; }
+.fb-icon-word { color: #60a5fa; }
+
 .fb-loading-overlay {
   position: absolute;
   inset: 0;

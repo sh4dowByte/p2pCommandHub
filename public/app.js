@@ -14,6 +14,7 @@ let commandOutputs = {}; // commandId -> string buffer of outputs
 let activeTab = 'terminal'; // 'terminal' | 'files'
 let agentPaths = {}; // agentId -> current path string
 let currentTheme = localStorage.getItem('theme') || 'dark'; // 'dark' | 'light'
+let fbViewMode = localStorage.getItem('fbViewMode') || 'list'; // 'list' | 'grid'
 
 // Apply theme on load
 if (currentTheme === 'light') {
@@ -55,6 +56,10 @@ const fbPathContainer = document.querySelector('.fb-path-container');
 const fbBtnGo = document.getElementById('fb-btn-go');
 const fbBtnRefresh = document.getElementById('fb-btn-refresh');
 const fbFilesBody = document.getElementById('fb-files-body');
+const fbTableView = document.getElementById('fb-table-view');
+const fbGridView = document.getElementById('fb-grid-view');
+const fbBtnViewToggle = document.getElementById('fb-btn-view-toggle');
+const fbViewIcon = document.getElementById('fb-view-icon');
 const fbLoading = document.getElementById('fb-loading');
 const fbEmptyState = document.getElementById('fb-empty-state');
 
@@ -82,6 +87,36 @@ editor.setOptions({
   fontSize: "13px",
   fontFamily: "var(--font-mono)"
 });
+
+function getFileIcon(filename, isDir) {
+  if (isDir) return { icon: 'folder', class: 'fb-icon-folder' };
+  
+  const ext = filename.split('.').pop().toLowerCase();
+  switch(ext) {
+    case 'js': case 'ts': case 'py': case 'java': case 'c': case 'cpp': case 'go': 
+    case 'rs': case 'php': case 'sh': case 'bash': case 'yml': case 'yaml': 
+    case 'json': case 'html': case 'css': case 'md': case 'sql': case 'xml':
+      return { icon: 'code', class: 'fb-icon-code' };
+    case 'jpg': case 'jpeg': case 'png': case 'gif': case 'svg': case 'webp':
+      return { icon: 'image', class: 'fb-icon-image' };
+    case 'mp4': case 'mkv': case 'avi': case 'mov':
+      return { icon: 'video', class: 'fb-icon-video' };
+    case 'mp3': case 'wav': case 'ogg': case 'flac':
+      return { icon: 'music', class: 'fb-icon-audio' };
+    case 'zip': case 'tar': case 'gz': case 'rar': case '7z':
+      return { icon: 'archive', class: 'fb-icon-archive' };
+    case 'pdf':
+      return { icon: 'file-text', class: 'fb-icon-pdf' };
+    case 'xls': case 'xlsx': case 'csv':
+      return { icon: 'table', class: 'fb-icon-sheet' };
+    case 'doc': case 'docx':
+      return { icon: 'file-text', class: 'fb-icon-word' };
+    case 'ppt': case 'pptx':
+      return { icon: 'presentation', class: 'fb-icon-word' };
+    default:
+      return { icon: 'file', class: 'fb-icon-file' };
+  }
+}
 
 function setEditorMode(filename) {
   const ext = filename.split('.').pop().toLowerCase();
@@ -157,10 +192,29 @@ socket.on('file-browse-response', (response) => {
 socket.on('file-browse-download-response', (response) => {
   showFbLoading(false);
   if (response.status === 'success') {
+    // Check if this was a thumbnail request (we'd need server support or detect by size/extension)
+    // For now, if it's an image and not a full preview, we might be loading it into a grid item
+    const isImg = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(response.name.split('.').pop().toLowerCase());
+    const thumbEl = document.getElementById(`thumb-${response.name.replace(/[^a-zA-Z0-9]/g, '-')}`);
+    
+    if (thumbEl && !previewTargetFilePath) {
+      thumbEl.src = `data:image/${response.name.split('.').pop().toLowerCase()};base64,${response.content}`;
+      return;
+    }
+
     if (previewTargetFilePath && response.path === previewTargetFilePath) {
       previewTargetFilePath = null;
       previewFilename.textContent = response.name;
       
+      if (isImg) {
+        previewToggleContainer.classList.add('hidden');
+        previewContent.classList.add('hidden');
+        previewContentHtml.classList.remove('hidden');
+        previewContentHtml.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100%;"><img src="data:image/${response.name.split('.').pop().toLowerCase()};base64,${response.content}" style="max-width:100%;max-height:100%;object-fit:contain;"></div>`;
+        previewModal.classList.remove('hidden');
+        return;
+      }
+
       let decoded = "";
       try {
         decoded = decodeURIComponent(escape(atob(response.content)));
@@ -225,7 +279,10 @@ socket.on('file-browse-download-response', (response) => {
     if (response.path === previewTargetFilePath) {
       previewTargetFilePath = null;
     }
-    alert(`Error: ${response.message || 'Failed to process file'}`);
+    // Only alert if it's not a thumbnail background load
+    if (!document.getElementById(`thumb-${response.name?.replace(/[^a-zA-Z0-9]/g, '-')}`)) {
+        alert(`Error: ${response.message || 'Failed to process file'}`);
+    }
   }
 });
 
@@ -797,6 +854,7 @@ function showFbLoading(show) {
 
 function renderFileList(items) {
   fbFilesBody.innerHTML = '';
+  fbGridView.innerHTML = '';
   
   if (!items || items.length === 0) {
     fbEmptyState.classList.remove('hidden');
@@ -804,6 +862,16 @@ function renderFileList(items) {
   }
   
   fbEmptyState.classList.add('hidden');
+  
+  // Update view toggle icon
+  fbViewIcon.setAttribute('data-lucide', fbViewMode === 'list' ? 'layout-grid' : 'list');
+  if (fbViewMode === 'list') {
+    fbTableView.classList.remove('hidden');
+    fbGridView.classList.add('hidden');
+  } else {
+    fbTableView.classList.add('hidden');
+    fbGridView.classList.remove('hidden');
+  }
   
   // Sort items: folders first, then files (alphabetical)
   items.sort((a, b) => {
@@ -813,110 +881,156 @@ function renderFileList(items) {
   });
   
   items.forEach(item => {
-    const tr = document.createElement('tr');
-    
-    // File Size Formatting
-    let sizeText = '-';
-    if (!item.isDir) {
-      sizeText = formatBytes(item.size);
-    }
-    
-    // Modified Date Formatting
-    let dateText = '-';
-    if (item.mtime) {
-      const d = new Date(item.mtime);
-      dateText = d.toLocaleString();
-    }
-    
-    const icon = item.isDir ? 'folder' : 'file';
-    const iconClass = item.isDir ? 'fb-icon-folder' : 'fb-icon-file';
-    
-    const nameHtml = item.isDir 
-      ? `<span class="fb-folder-link" data-name="${item.name}">${item.name}</span>`
-      : `<span class="fb-file-name">${item.name}</span>`;
-    
-    const actionHtml = item.isDir 
-      ? '' 
-      : `
-        <div class="fb-actions-group">
-          <button class="fb-action-btn btn-preview-file" data-name="${item.name}" title="Preview file">
-            <i data-lucide="eye"></i>
-            <span>Preview</span>
+    const iconData = getFileIcon(item.name, item.isDir);
+    const sizeText = item.isDir ? '-' : formatBytes(item.size);
+    const dateText = item.mtime ? new Date(item.mtime).toLocaleString() : '-';
+
+    if (fbViewMode === 'list') {
+      const tr = document.createElement('tr');
+      const nameHtml = item.isDir 
+        ? `<span class="fb-folder-link" data-name="${item.name}">${item.name}</span>`
+        : `<span class="fb-file-name">${item.name}</span>`;
+      
+      const actionHtml = item.isDir 
+        ? '' 
+        : `
+          <div class="fb-actions-group">
+            <button class="fb-action-btn btn-preview-file" data-name="${item.name}" title="Preview file">
+              <i data-lucide="eye"></i>
+              <span>Preview</span>
+            </button>
+            <button class="fb-action-btn btn-download-file" data-name="${item.name}" title="Download file">
+              <i data-lucide="download"></i>
+              <span>Get</span>
+            </button>
+          </div>
+        `;
+        
+      tr.innerHTML = `
+        <td class="col-name">
+          <div class="fb-item-name-wrapper">
+            <i data-lucide="${iconData.icon}" class="${iconData.class}" style="width:16px;height:16px;"></i>
+            ${nameHtml}
+          </div>
+        </td>
+        <td class="col-size">${sizeText}</td>
+        <td class="col-mtime">${dateText}</td>
+        <td class="col-actions">${actionHtml}</td>
+      `;
+      
+      // Event Listeners for List View
+      if (item.isDir) {
+        tr.querySelector('.fb-folder-link').addEventListener('click', () => navigateToFolder(item.name));
+      } else {
+        tr.querySelector('.btn-download-file').addEventListener('click', () => downloadFile(item.name));
+        tr.querySelector('.btn-preview-file').addEventListener('click', () => previewFile(item.name));
+      }
+      fbFilesBody.appendChild(tr);
+    } else {
+      // Grid View Rendering
+      const gridItem = document.createElement('div');
+      gridItem.className = 'fb-grid-item';
+      
+      const isImg = !item.isDir && ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(item.name.split('.').pop().toLowerCase());
+      
+      let visualHtml = `
+        <div class="fb-grid-icon-wrapper">
+          <i data-lucide="${iconData.icon}" class="${iconData.class}"></i>
+        </div>
+      `;
+      
+      if (isImg) {
+        visualHtml = `
+          <img class="fb-grid-thumbnail" id="thumb-${item.name.replace(/[^a-zA-Z0-9]/g, '-')}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23242924'/%3E%3Cpath d='M30 40 L70 40 L50 70 Z' fill='%23444'/%3E%3C/svg%3E" alt="${item.name}">
+        `;
+        // Trigger thumbnail loading
+        loadThumbnail(item.name);
+      }
+
+      gridItem.innerHTML = `
+        ${visualHtml}
+        <div class="fb-grid-name" title="${item.name}">${item.name}</div>
+        <div class="fb-grid-meta">${item.isDir ? 'Folder' : sizeText}</div>
+        <div class="fb-grid-actions ${item.isDir ? 'hidden' : ''}">
+          <button class="fb-grid-action-btn btn-preview-file" title="Preview">
+            <i data-lucide="eye" style="width:14px;height:14px;"></i>
           </button>
-          <button class="fb-action-btn btn-download-file" data-name="${item.name}" title="Download file">
-            <i data-lucide="download"></i>
-            <span>Get</span>
+          <button class="fb-grid-action-btn btn-download-file" title="Download">
+            <i data-lucide="download" style="width:14px;height:14px;"></i>
           </button>
         </div>
       `;
       
-    tr.innerHTML = `
-      <td class="col-name">
-        <div class="fb-item-name-wrapper">
-          <i data-lucide="${icon}" class="${iconClass}" style="width:16px;height:16px;"></i>
-          ${nameHtml}
-        </div>
-      </td>
-      <td class="col-size">${sizeText}</td>
-      <td class="col-mtime">${dateText}</td>
-      <td class="col-actions">${actionHtml}</td>
-    `;
-    
-    // Click handler for folders
-    if (item.isDir) {
-      const link = tr.querySelector('.fb-folder-link');
-      link.addEventListener('click', () => {
-        const currentPath = agentPaths[selectedAgentId] || '.';
-        const sep = currentPath.includes('\\') ? '\\' : '/';
-        let newPath = currentPath;
-        
-        // Clean trailing slash
-        if (newPath.endsWith(sep)) {
-          newPath = newPath.slice(0, -1);
-        }
-        newPath = newPath + sep + item.name;
-        fetchDirectoryContents(newPath);
+      gridItem.addEventListener('click', (e) => {
+        if (e.target.closest('.fb-grid-action-btn')) return;
+        if (item.isDir) navigateToFolder(item.name);
+        else previewFile(item.name);
       });
-    } else {
-      const dlBtn = tr.querySelector('.btn-download-file');
-      if (dlBtn) {
-        dlBtn.addEventListener('click', () => {
-          const currentPath = agentPaths[selectedAgentId] || '.';
-          const sep = currentPath.includes('\\') ? '\\' : '/';
-          let filePath = currentPath;
-          if (filePath.endsWith(sep)) {
-            filePath = filePath.slice(0, -1);
-          }
-          filePath = filePath + sep + item.name;
-          
-          showFbLoading(true);
-          socket.emit('file-browse-download', { agentId: selectedAgentId, path: filePath });
+      
+      if (!item.isDir) {
+        gridItem.querySelector('.btn-download-file').addEventListener('click', (e) => {
+          e.stopPropagation();
+          downloadFile(item.name);
+        });
+        gridItem.querySelector('.btn-preview-file').addEventListener('click', (e) => {
+          e.stopPropagation();
+          previewFile(item.name);
         });
       }
       
-      const previewBtn = tr.querySelector('.btn-preview-file');
-      if (previewBtn) {
-        previewBtn.addEventListener('click', () => {
-          const currentPath = agentPaths[selectedAgentId] || '.';
-          const sep = currentPath.includes('\\') ? '\\' : '/';
-          let filePath = currentPath;
-          if (filePath.endsWith(sep)) {
-            filePath = filePath.slice(0, -1);
-          }
-          filePath = filePath + sep + item.name;
-          
-          previewTargetFilePath = filePath;
-          showFbLoading(true);
-          socket.emit('file-browse-download', { agentId: selectedAgentId, path: filePath });
-        });
-      }
+      fbGridView.appendChild(gridItem);
     }
-    
-    fbFilesBody.appendChild(tr);
   });
   
   lucide.createIcons();
 }
+
+// Helper functions extracted for reuse
+function navigateToFolder(folderName) {
+  const currentPath = agentPaths[selectedAgentId] || '.';
+  const sep = currentPath.includes('\\') ? '\\' : '/';
+  let newPath = currentPath;
+  if (newPath.endsWith(sep)) newPath = newPath.slice(0, -1);
+  newPath = newPath + sep + folderName;
+  fetchDirectoryContents(newPath);
+}
+
+function downloadFile(filename) {
+  const currentPath = agentPaths[selectedAgentId] || '.';
+  const sep = currentPath.includes('\\') ? '\\' : '/';
+  let filePath = currentPath;
+  if (filePath.endsWith(sep)) filePath = filePath.slice(0, -1);
+  filePath = filePath + sep + filename;
+  showFbLoading(true);
+  socket.emit('file-browse-download', { agentId: selectedAgentId, path: filePath });
+}
+
+function previewFile(filename) {
+  const currentPath = agentPaths[selectedAgentId] || '.';
+  const sep = currentPath.includes('\\') ? '\\' : '/';
+  let filePath = currentPath;
+  if (filePath.endsWith(sep)) filePath = filePath.slice(0, -1);
+  filePath = filePath + sep + filename;
+  previewTargetFilePath = filePath;
+  showFbLoading(true);
+  socket.emit('file-browse-download', { agentId: selectedAgentId, path: filePath });
+}
+
+function loadThumbnail(filename) {
+  const currentPath = agentPaths[selectedAgentId] || '.';
+  const sep = currentPath.includes('\\') ? '\\' : '/';
+  let filePath = currentPath;
+  if (filePath.endsWith(sep)) filePath = filePath.slice(0, -1);
+  filePath = filePath + sep + filename;
+  
+  // We use the same download event but handle it specifically for thumbnails if we want
+  // To keep it simple for now, we just use the existing download event.
+  // In a real app, we'd have a separate thumbnail event to avoid full file download.
+  socket.emit('file-browse-download', { agentId: selectedAgentId, path: filePath, isThumbnail: true });
+}
+
+// Modify the socket listener for file-browse-download-response to handle thumbnails
+// We need to update the existing listener. I'll do that in a separate chunk or chunk below.
 
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
@@ -966,6 +1080,14 @@ fbPathInput.addEventListener('keydown', (e) => {
       fetchDirectoryContents(path);
     }
   }
+});
+
+fbBtnViewToggle.addEventListener('click', () => {
+  fbViewMode = fbViewMode === 'list' ? 'grid' : 'list';
+  localStorage.setItem('fbViewMode', fbViewMode);
+  
+  const currentPath = agentPaths[selectedAgentId] || '.';
+  fetchDirectoryContents(currentPath);
 });
 
 fbBtnUp.addEventListener('click', () => {
