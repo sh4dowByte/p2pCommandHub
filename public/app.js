@@ -645,7 +645,8 @@ function updateInstallerCommands() {
 btnAddAgentModal.addEventListener('click', async () => {
   // Pre-fill server address with configured server_url or window's loaded location origin
   try {
-    const res = await fetch('/api/config');
+    const res = await apiFetch('/api/config');
+    if (!res) return;
     const config = await res.json();
     agentServerHostInput.value = config.serverUrl || window.location.origin;
   } catch (err) {
@@ -988,13 +989,25 @@ const btnCancelSettings = document.getElementById('btn-cancel-settings');
 const btnSaveSettings = document.getElementById('btn-save-settings');
 const settingsServerUrl = document.getElementById('settings-server-url');
 const settingsSecretToken = document.getElementById('settings-secret-token');
+const settingsDashboardPassword = document.getElementById('settings-dashboard-password');
+
+async function apiFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  if (response.status === 401) {
+    window.location.href = '/login';
+    return;
+  }
+  return response;
+}
 
 async function loadSettings() {
   try {
-    const res = await fetch('/api/config');
+    const res = await apiFetch('/api/config');
+    if (!res) return;
     const config = await res.json();
     settingsServerUrl.value = config.serverUrl || '';
     settingsSecretToken.value = config.secretToken || '';
+    settingsDashboardPassword.value = ''; // Reset password field
   } catch (err) {
     console.error('Failed to load settings:', err);
   }
@@ -1018,15 +1031,17 @@ btnSaveSettings.addEventListener('click', async () => {
   btnSaveSettings.disabled = true;
 
   try {
-    const res = await fetch('/api/config', {
+    const res = await apiFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         serverUrl: settingsServerUrl.value.trim(),
-        secretToken: settingsSecretToken.value.trim()
+        secretToken: settingsSecretToken.value.trim(),
+        dashboardPassword: settingsDashboardPassword.value.trim()
       })
     });
 
+    if (!res) return;
     const result = await res.json();
     if (result.status === 'success') {
       btnSaveSettings.textContent = '✓ Saved!';
@@ -1046,6 +1061,20 @@ btnSaveSettings.addEventListener('click', async () => {
     btnSaveSettings.disabled = false;
   }
 });
+
+// Logout Logic
+const btnLogout = document.getElementById('btn-logout');
+if (btnLogout) {
+  btnLogout.addEventListener('click', async () => {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login';
+    } catch (err) {
+      console.error('Logout failed:', err);
+      window.location.href = '/login';
+    }
+  });
+}
 
 // Mobile Sidebar Toggle event listeners
 const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');

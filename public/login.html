@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - P2P Command Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .login-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .login-logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
+        }
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 8px;
+        }
+        .login-subtitle {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        .form-group {
+            margin-bottom: 24px;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #cbd5e1;
+            margin-bottom: 8px;
+        }
+        .form-input-container {
+            position: relative;
+        }
+        .form-input-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+        }
+        .form-control {
+            width: 100%;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px 12px 12px 40px;
+            color: white;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+            background: rgba(15, 23, 42, 0.8);
+        }
+        .btn-login {
+            width: 100%;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-login:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+        .btn-login:active {
+            transform: translateY(0);
+        }
+        .error-msg {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">
+                <i data-lucide="terminal" style="width: 32px; height: 32px;"></i>
+            </div>
+            <h1 class="login-title">P2P Command Hub</h1>
+            <p class="login-subtitle">Enter your password to access the dashboard</p>
+        </div>
+
+        <div id="error-alert" class="error-msg">
+            <i data-lucide="alert-circle" style="width: 18px; height: 18px;"></i>
+            <span id="error-text">Invalid password</span>
+        </div>
+
+        <form id="login-form">
+            <div class="form-group">
+                <label class="form-label" for="password">Dashboard Password</label>
+                <div class="form-input-container">
+                    <i data-lucide="lock" class="form-input-icon" style="width: 18px; height: 18px;"></i>
+                    <input type="password" id="password" class="form-control" placeholder="••••••••" required autofocus>
+                </div>
+            </div>
+            <button type="submit" class="btn-login" id="btn-submit">
+                <span>Login</span>
+                <i data-lucide="arrow-right" style="width: 18px; height: 18px;"></i>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        
+        const form = document.getElementById('login-form');
+        const passwordInput = document.getElementById('password');
+        const errorAlert = document.getElementById('error-alert');
+        const errorText = document.getElementById('error-text');
+        const btnSubmit = document.getElementById('btn-submit');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = passwordInput.value;
+            
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<span>Logging in...</span>';
+            errorAlert.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    window.location.href = '/';
+                } else {
+                    errorText.textContent = data.message || 'Login failed';
+                    errorAlert.style.display = 'flex';
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = '<span>Login</span><i data-lucide="arrow-right" style="width: 18px; height: 18px;"></i>';
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                }
+            } catch (err) {
+                errorText.textContent = 'Connection error';
+                errorAlert.style.display = 'flex';
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = '<span>Login</span><i data-lucide="arrow-right" style="width: 18px; height: 18px;"></i>';
+            }
+        });
+    </script>
+</body>
+</html>

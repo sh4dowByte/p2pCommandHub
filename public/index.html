@@ -50,6 +50,9 @@
         <button id="btn-add-agent-modal" class="btn btn-secondary btn-full">
           <i data-lucide="plus"></i> Add New Agent
         </button>
+        <button id="btn-logout" class="btn btn-ghost btn-full" style="margin-top: 8px; color: var(--text-muted);">
+          <i data-lucide="log-out"></i> Logout
+        </button>
       </div>
     </aside>
     <div class="sidebar-backdrop hidden" id="sidebar-backdrop"></div>
@@ -336,6 +339,12 @@
           <label for="settings-secret-token" class="form-label">Secret Connection Token</label>
           <input type="text" id="settings-secret-token" class="form-control">
           <span class="form-help">Authentication key required by remote agents to establish connection.</span>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="settings-dashboard-password" class="form-label">Change Dashboard Password</label>
+          <input type="password" id="settings-dashboard-password" class="form-control" placeholder="Enter new password">
+          <span class="form-help">Leave blank to keep the current password.</span>
         </div>
 
 

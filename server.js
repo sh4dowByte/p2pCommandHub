@@ -3,16 +3,20 @@ const http = require('http');
 const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
 
 // Load configurations
 let CONFIG = {
   secret_token: "p2p_secure_agent_token_2026",
-  server_url: ""
+  server_url: "",
+  dashboard_password: "admin" // Default password
 };
 
 try {
   const configFile = fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8');
-  CONFIG = JSON.parse(configFile);
+  const fileConfig = JSON.parse(configFile);
+  CONFIG = { ...CONFIG, ...fileConfig };
 } catch (err) {
   console.warn('Could not read config.json, using defaults:', err.message);
 }
@@ -26,9 +30,63 @@ const io = new Server(server, {
   }
 });
 
+const sessionMiddleware = session({
+  secret: 'p2p-hub-secret-key-2026',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+});
+
+app.use(sessionMiddleware);
+io.engine.use(sessionMiddleware);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+// Session middleware is already applied above for both app and io
+
+// Authentication Middleware
+const isAuthenticated = (req, res, next) => {
+  if (req.session && req.session.authenticated) {
+    return next();
+  }
+  if (req.path === '/login' || req.path === '/api/login' || req.path.startsWith('/install-') || req.path.startsWith('/api/agent/')) {
+    return next();
+  }
+  if (req.path.endsWith('.css') || req.path.endsWith('.js') || req.path.endsWith('.png') || req.path.endsWith('.jpg') || req.path.endsWith('.svg')) {
+    return next();
+  }
+  
+  if (req.xhr || req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  } else {
+    return res.redirect('/login');
+  }
+};
+
+app.use(isAuthenticated);
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/login', (req, res) => {
+  if (req.session.authenticated) {
+    return res.redirect('/');
+  }
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  if (password === CONFIG.dashboard_password) {
+    req.session.authenticated = true;
+    return res.json({ status: 'success' });
+  }
+  return res.status(401).json({ status: 'error', message: 'Invalid password' });
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy();
+  res.json({ status: 'success' });
+});
 
 // Memory-based tracking
 const agents = new Map(); // id -> agent data
@@ -274,20 +332,25 @@ app.post('/api/agent/response', (req, res) => {
 app.get('/api/config', (req, res) => {
   return res.json({
     serverUrl: CONFIG.server_url || '',
-    secretToken: CONFIG.secret_token || ''
+    secretToken: CONFIG.secret_token || '',
+    hasPassword: !!CONFIG.dashboard_password
   });
 });
 
 // Update configuration settings
 app.post('/api/config', (req, res) => {
-  const { serverUrl, secretToken } = req.body;
+  const { serverUrl, secretToken, dashboardPassword } = req.body;
   
   if (serverUrl !== undefined) CONFIG.server_url = serverUrl.trim();
   if (secretToken !== undefined) CONFIG.secret_token = secretToken.trim();
+  if (dashboardPassword !== undefined && dashboardPassword.trim() !== "") {
+    CONFIG.dashboard_password = dashboardPassword.trim();
+  }
   
   const configToSave = {
     secret_token: CONFIG.secret_token,
-    server_url: CONFIG.server_url
+    server_url: CONFIG.server_url,
+    dashboard_password: CONFIG.dashboard_password
   };
   
   try {
@@ -307,6 +370,14 @@ io.on('connection', (socket) => {
   const { role, token } = socket.handshake.auth;
 
   if (role === 'dashboard') {
+    // Check session authentication for dashboard role
+    const session = socket.request.session;
+    if (!session || !session.authenticated) {
+      console.warn(`Unauthorized dashboard socket connection attempt from ${socket.id}`);
+      socket.disconnect(true);
+      return;
+    }
+    
     // Dashboard client joins dashboard room
     socket.join('dashboard');
     // Send list of current agents
