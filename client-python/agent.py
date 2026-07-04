@@ -99,9 +99,61 @@ active_processes = {}
 # ----------------------------------------------------
 # Command Execution Handler
 # ----------------------------------------------------
+def stream_file_chunks(file_path, command_id):
+    try:
+        if not os.path.isfile(file_path):
+            sio.emit('command-output', {
+                'commandId': command_id,
+                'output': f"Error: File not found: {file_path}\n",
+                'isEof': True,
+                'exitCode': 1
+            })
+            return
+
+        import base64
+        # Chunk size MUST be a multiple of 3 (so base64 encoding has no internal padding)
+        chunk_size = 60000 
+        with open(file_path, 'rb') as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                encoded_chunk = base64.b64encode(chunk).decode('utf-8')
+                sio.emit('command-output', {
+                    'commandId': command_id,
+                    'output': encoded_chunk,
+                    'isEof': False
+                })
+                # Yield control to allow heartbeat and socket events
+                time.sleep(0.01)
+
+        sio.emit('command-output', {
+            'commandId': command_id,
+            'output': '',
+            'isEof': True,
+            'exitCode': 0
+        })
+    except Exception as e:
+        print(f"Error streaming file: {e}")
+        sio.emit('command-output', {
+            'commandId': command_id,
+            'output': f"Error streaming file: {str(e)}\n",
+            'isEof': True,
+            'exitCode': -1
+        })
+
 def execute_command_thread(cmd, command_id):
     print(f"Executing: {cmd} (ID: {command_id})")
     
+    if cmd.startswith('__STREAM_FILE__:'):
+        file_path = cmd[len('__STREAM_FILE__:'):]
+        # Resolve home directory
+        if file_path.startswith('~'):
+            file_path = os.path.expanduser(file_path)
+        file_path = os.path.abspath(file_path)
+        stream_file_chunks(file_path, command_id)
+        return
+
     try:
         # Merge stderr into stdout so we stream both together
         process = subprocess.Popen(

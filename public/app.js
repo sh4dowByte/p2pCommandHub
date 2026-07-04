@@ -60,6 +60,7 @@ const themeIcon = document.getElementById('theme-icon');
 const tabBtnTerminal = document.getElementById('tab-btn-terminal');
 const tabBtnFiles = document.getElementById('tab-btn-files');
 const terminalTabContent = document.getElementById('terminal-tab-content');
+const terminalAutocomplete = document.getElementById('terminal-autocomplete');
 const fileBrowserTabContent = document.getElementById('file-browser-tab-content');
 const tabBtnDocker = document.getElementById('tab-btn-docker');
 const dockerTabContent = document.getElementById('docker-tab-content');
@@ -346,7 +347,7 @@ socket.on('file-browse-download-response', (response) => {
         btnPreviewModeCode.classList.add('active');
         btnPreviewModeRender.classList.remove('active');
         previewContent.classList.remove('hidden');
-        previewContentHtml.classList.add('hidden');
+        previewContentHtml.classList.remove('hidden');
       }
       
       previewModal.classList.remove('hidden');
@@ -470,7 +471,6 @@ function renderAgentsList() {
     if (agent.platform.toLowerCase().includes('darwin') || agent.platform.toLowerCase().includes('mac')) {
       platformIcon = 'apple';
     } else if (agent.platform.toLowerCase().includes('win')) {
-      platformIcon = 'windows'; // Note: Lucide fallback to monitor if windows isn't loaded, let's use check or simple icons
       platformIcon = 'monitor'; 
     } else if (agent.platform.toLowerCase().includes('linux')) {
       platformIcon = 'terminal';
@@ -670,8 +670,49 @@ function appendTerminalOutput(text) {
     terminalScreen.appendChild(activeOutput);
   }
   
-  activeOutput.textContent += text;
+  // Convert ANSI colors to HTML
+  let html = ansiToHtml(text);
+  
+  // Make paths clickable
+  html = html.replace(/(\/|~)[a-zA-Z0-9\._\-\/]+/g, (match) => {
+    return `<span class="clickable-path" onclick="jumpToPath('${match}')">${match}</span>`;
+  });
+
+  const span = document.createElement('span');
+  span.innerHTML = html;
+  activeOutput.appendChild(span);
+  
   terminalScreen.scrollTop = terminalScreen.scrollHeight;
+}
+
+function jumpToPath(path) {
+    if (!selectedAgentId) return;
+    switchTab('files');
+    fetchDirectoryContents(path);
+}
+
+function ansiToHtml(text) {
+  const colors = {
+    '0': '', // Reset
+    '30': 'color: #1a1b26', // Black
+    '31': 'color: #f7768e', // Red
+    '32': 'color: #9ece6a', // Green
+    '33': 'color: #e0af68', // Yellow
+    '34': 'color: #7aa2f7', // Blue
+    '35': 'color: #bb9af7', // Magenta
+    '36': 'color: #7dcfff', // Cyan
+    '37': 'color: #a9b1d6', // White
+    '90': 'color: #565f89', // Bright Black
+    '91': 'color: #ff9e64', // Bright Red
+  };
+
+  return text
+    .replace(/\x1B\[(\d+)m/g, (match, code) => {
+      if (code === '0') return '</span>';
+      const style = colors[code] || '';
+      return `<span style="${style}">`;
+    })
+    .replace(/\n/g, '<br>');
 }
 
 // Send Command via Single Terminal UI
@@ -703,6 +744,7 @@ function submitCommand() {
 
   socket.emit('execute-command', { agentId: selectedAgentId, cmd });
   terminalInput.value = '';
+  terminalAutocomplete.classList.add('hidden');
 }
 
 // Event Listeners
@@ -727,6 +769,40 @@ terminalInput.addEventListener('keydown', (e) => {
   }
 });
 btnSendCommand.addEventListener('click', submitCommand);
+
+terminalInput.addEventListener('input', (e) => {
+  const val = terminalInput.value.trim();
+  if (!val || commandHistory.length === 0) {
+    terminalAutocomplete.classList.add('hidden');
+    return;
+  }
+
+  const suggestions = [...new Set(commandHistory)].filter(cmd => 
+    cmd.toLowerCase().startsWith(val.toLowerCase()) && cmd !== val
+  ).slice(0, 5);
+
+  if (suggestions.length > 0) {
+    terminalAutocomplete.innerHTML = suggestions.map(s => 
+      `<div class="autocomplete-item">${s}</div>`
+    ).join('');
+    terminalAutocomplete.classList.remove('hidden');
+    
+    terminalAutocomplete.querySelectorAll('.autocomplete-item').forEach(item => {
+      item.addEventListener('click', () => {
+        terminalInput.value = item.textContent;
+        terminalAutocomplete.classList.add('hidden');
+        terminalInput.focus();
+      });
+    });
+  } else {
+    terminalAutocomplete.classList.add('hidden');
+  }
+});
+
+// Close autocomplete on blur
+terminalInput.addEventListener('blur', () => {
+  setTimeout(() => terminalAutocomplete.classList.add('hidden'), 200);
+});
 
 const btnStopCommand = document.getElementById('btn-stop-command');
 if (btnStopCommand) {
@@ -1133,7 +1209,7 @@ function renderFileList(items) {
         tr.querySelector('.fb-folder-link').addEventListener('click', () => navigateToFolder(item.name));
       } else {
         tr.querySelector('.btn-download-file').addEventListener('click', () => downloadFile(item.name));
-        tr.querySelector('.btn-preview-file').addEventListener('click', () => previewFile(item.name));
+        tr.querySelector('.btn-preview-file').addEventListener('click', () => previewFile(item.name, item.size));
       }
       fbFilesBody.appendChild(tr);
     } else {
@@ -1174,7 +1250,7 @@ function renderFileList(items) {
       gridItem.addEventListener('click', (e) => {
         if (e.target.closest('.fb-grid-action-btn')) return;
         if (item.isDir) navigateToFolder(item.name);
-        else previewFile(item.name);
+        else previewFile(item.name, item.size);
       });
       
       if (!item.isDir) {
@@ -1184,7 +1260,7 @@ function renderFileList(items) {
         });
         gridItem.querySelector('.btn-preview-file').addEventListener('click', (e) => {
           e.stopPropagation();
-          previewFile(item.name);
+          previewFile(item.name, item.size);
         });
       }
       
@@ -1206,16 +1282,26 @@ function navigateToFolder(folderName) {
 }
 
 function downloadFile(filename) {
+  if (!selectedAgentId) return;
   const currentPath = agentPaths[selectedAgentId] || '.';
   const sep = currentPath.includes('\\') ? '\\' : '/';
   let filePath = currentPath;
   if (filePath.endsWith(sep)) filePath = filePath.slice(0, -1);
   filePath = filePath + sep + filename;
-  showFbLoading(true);
-  socket.emit('file-browse-download', { agentId: selectedAgentId, path: filePath });
+  
+  // Use the new streaming download endpoint
+  const downloadUrl = `/api/download/stream?agentId=${selectedAgentId}&path=${encodeURIComponent(filePath)}`;
+  window.open(downloadUrl, '_blank');
 }
 
-function previewFile(filename) {
+function previewFile(filename, size) {
+  // Limit preview to 2MB to prevent browser lag
+  const PREVIEW_LIMIT = 2 * 1024 * 1024;
+  if (size > PREVIEW_LIMIT) {
+    alert(`File is too large to preview (${formatBytes(size)}). Please use the Download button instead.`);
+    return;
+  }
+
   const currentPath = agentPaths[selectedAgentId] || '.';
   const sep = currentPath.includes('\\') ? '\\' : '/';
   let filePath = currentPath;

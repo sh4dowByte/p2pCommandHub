@@ -165,7 +165,10 @@
 
           <div class="terminal-input-container">
             <span class="terminal-input-prompt" id="input-prompt">$</span>
-            <input type="text" id="terminal-input" placeholder="Type command here..." disabled autocomplete="off">
+            <div class="terminal-input-wrapper">
+              <input type="text" id="terminal-input" placeholder="Type command here..." disabled autocomplete="off">
+              <div id="terminal-autocomplete" class="terminal-autocomplete hidden"></div>
+            </div>
             <button id="btn-send-command" class="btn btn-primary" disabled>
               <i data-lucide="send"></i>
             </button>

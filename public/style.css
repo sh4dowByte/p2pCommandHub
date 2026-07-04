@@ -1786,3 +1786,91 @@ body {
   display: flex;
   gap: 8px;
 }
+
+/* Interactive Terminal Features */
+.clickable-path {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+  transition: background-color var(--transition-fast);
+}
+
+.clickable-path:hover {
+  background-color: var(--primary-glow);
+}
+
+.terminal-input-prompt {
+  position: relative;
+}
+
+#terminal-input {
+  caret-color: var(--primary);
+}
+
+/* Scanline Effect for Terminal */
+.terminal-body {
+  position: relative;
+  background-image: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.1) 50%
+  ),
+  linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 4px, 3px 100%;
+}
+
+.terminal-body::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    circle,
+    rgba(125, 163, 114, 0.05) 0%,
+    rgba(0, 0, 0, 0) 80%
+  );
+  pointer-events: none;
+}
+
+/* Autocomplete Styles */
+.terminal-input-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+}
+
+.terminal-autocomplete {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 100%;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  z-index: 100;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.autocomplete-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.autocomplete-item:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--primary);
+}

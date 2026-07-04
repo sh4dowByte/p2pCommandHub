@@ -40,8 +40,8 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 // Session middleware is already applied above for both app and io
 
@@ -94,6 +94,8 @@ const bashCommandQueues = new Map(); // agentId -> array of { commandId, cmd }
 const activeCommands = new Map(); // commandId -> { agentId, dashboardSockets: Set }
 const pendingFileBrowse = new Map(); // commandId -> { socketId, type, path, chunks: [] }
 const pendingDockerList = new Map(); // commandId -> { socketId, chunks: [] }
+const activeDownloadStreams = new Map(); // commandId -> express response object
+const downloadBuffers = new Map(); // commandId -> Buffer
 
 // Helper to cleanup stale Bash agents (e.g. no poll in 15 seconds)
 setInterval(() => {
@@ -241,6 +243,7 @@ app.post('/api/agent/response', (req, res) => {
   // Intercept file browsing commands
   const isFb = pendingFileBrowse.has(commandId);
   const isDocker = pendingDockerList.has(commandId);
+  const isStream = activeDownloadStreams.has(commandId);
 
   if (isFb) {
     const pending = pendingFileBrowse.get(commandId);
@@ -322,6 +325,7 @@ app.post('/api/agent/response', (req, res) => {
     return res.json({ status: 'ok' });
   }
 
+
   if (isDocker) {
     const pending = pendingDockerList.get(commandId);
     if (output) {
@@ -357,6 +361,39 @@ app.post('/api/agent/response', (req, res) => {
           });
         }
       }
+    }
+    return res.json({ status: 'ok' });
+  }
+
+  if (isStream) {
+    const streamRes = activeDownloadStreams.get(commandId);
+    if (output) {
+      try {
+        let bufferStr = (downloadBuffers.get(commandId) || '') + output.replace(/[\r\n\s]/g, '');
+        const validLength = Math.floor(bufferStr.length / 4) * 4;
+        
+        if (validLength > 0) {
+          const toDecode = bufferStr.substring(0, validLength);
+          streamRes.write(Buffer.from(toDecode, 'base64'));
+          downloadBuffers.set(commandId, bufferStr.substring(validLength));
+        } else {
+          downloadBuffers.set(commandId, bufferStr);
+        }
+      } catch (e) {
+        console.error('Error writing chunk to stream:', e);
+      }
+    }
+
+    if (eof) {
+      const remaining = downloadBuffers.get(commandId);
+      if (remaining && remaining.length > 0) {
+        try {
+          streamRes.write(Buffer.from(remaining, 'base64'));
+        } catch (e) {}
+      }
+      activeDownloadStreams.delete(commandId);
+      downloadBuffers.delete(commandId);
+      streamRes.end();
     }
     return res.json({ status: 'ok' });
   }
@@ -407,6 +444,45 @@ app.post('/api/config', (req, res) => {
   }
 });
 
+// Streaming Download Endpoint
+app.get('/api/download/stream', (req, res) => {
+  const { agentId, path: filePath } = req.query;
+  const agent = agents.get(agentId);
+  
+  if (!agent || agent.status !== 'online') {
+    return res.status(404).send('Agent offline or not found.');
+  }
+
+  const filename = filePath.split('/').pop() || 'download';
+  res.setHeader('Content-disposition', 'attachment; filename=' + filename);
+  res.setHeader('Content-type', 'application/octet-stream');
+
+  const commandId = 'stream_dl_' + Math.random().toString(36).substring(2, 11);
+  activeDownloadStreams.set(commandId, res);
+
+  // Tell agent to start streaming
+  const escapedPath = filePath.replace(/"/g, '\\"');
+  // Bash command to output base64 chunks line by line
+  const cmd = `if [ ! -f "${escapedPath}" ]; then exit 1; fi; if command -v base64 >/dev/null 2>&1; then if command -v fold >/dev/null 2>&1; then base64 "${escapedPath}" | tr -d '\\r\\n' | fold -w 60000; else base64 "${escapedPath}"; fi; else exit 127; fi`;
+
+  if (agent.type === 'python') {
+    const pythonCmd = `__STREAM_FILE__:${filePath}`;
+    const agentSocketId = agent.socketId || agentId;
+    io.to(agentSocketId).emit('run-command', { cmd: pythonCmd, commandId });
+  } else if (agent.type === 'bash') {
+    if (!bashCommandQueues.has(agentId)) {
+      bashCommandQueues.set(agentId, []);
+    }
+    bashCommandQueues.get(agentId).push({ commandId, cmd });
+  }
+
+  // Handle client disconnect
+  req.on('close', () => {
+    activeDownloadStreams.delete(commandId);
+    // Optionally tell agent to kill the command
+  });
+});
+
 // ----------------------------------------------------
 // Socket.io for Python Agent & Web UI
 // ----------------------------------------------------
@@ -436,7 +512,8 @@ io.on('connection', (socket) => {
       }
 
       if (agent.type === 'python') {
-        const agentSocket = io.sockets.sockets.get(agentId);
+        const agentSocketId = agent.socketId || agentId;
+        const agentSocket = io.sockets.sockets.get(agentSocketId);
         if (agentSocket) {
           agentSocket.emit('file-browse-list', { path }, (response) => {
             socket.emit('file-browse-response', response);
@@ -469,7 +546,8 @@ io.on('connection', (socket) => {
       }
 
       if (agent.type === 'python') {
-        const agentSocket = io.sockets.sockets.get(agentId);
+        const agentSocketId = agent.socketId || agentId;
+        const agentSocket = io.sockets.sockets.get(agentSocketId);
         if (agentSocket) {
           agentSocket.emit('file-browse-read', { path }, (response) => {
             if (response) {
@@ -487,7 +565,7 @@ io.on('connection', (socket) => {
         agent.activeCommandId = commandId;
 
         const escapedPath = path.replace(/"/g, '\\"');
-        const cmd = `if command -v base64 >/dev/null 2>&1; then base64 -i "${escapedPath}" 2>/dev/null || base64 "${escapedPath}"; elif command -v openssl >/dev/null 2>&1; then openssl base64 -in "${escapedPath}"; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "${escapedPath}"; elif command -v python >/dev/null 2>&1; then python -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()))' "${escapedPath}"; else echo "No base64 encoder found" >&2; exit 127; fi`;
+        const cmd = `FILE_SIZE=$(stat -c%s "${escapedPath}" 2>/dev/null || stat -f%z "${escapedPath}" 2>/dev/null || echo 0); if [ "$FILE_SIZE" -gt 52428800 ]; then echo "Error: File too large (Max 50MB)" >&2; exit 1; fi; if command -v base64 >/dev/null 2>&1; then base64 -i "${escapedPath}" 2>/dev/null || base64 "${escapedPath}"; elif command -v openssl >/dev/null 2>&1; then openssl base64 -in "${escapedPath}"; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "${escapedPath}"; elif command -v python >/dev/null 2>&1; then python -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()))' "${escapedPath}"; else echo "No base64 encoder found" >&2; exit 127; fi`;
 
         if (!bashCommandQueues.has(agentId)) {
           bashCommandQueues.set(agentId, []);
@@ -511,11 +589,12 @@ io.on('connection', (socket) => {
       agent.activeCommandId = commandId;
 
       if (agent.type === 'python') {
-        const agentSocket = io.sockets.sockets.get(agentId);
+        const agentSocketId = agent.socketId || agentId;
+        const agentSocket = io.sockets.sockets.get(agentSocketId);
         if (agentSocket) {
           agentSocket.emit('run-command', { cmd, commandId });
         } else {
-          socket.emit('docker-list-response', { status: 'error', message: 'Agent socket not found.' });
+          socket.emit('command-error', { error: 'Agent socket not found.' });
         }
       } else if (agent.type === 'bash') {
         if (!bashCommandQueues.has(agentId)) {
@@ -540,7 +619,8 @@ io.on('connection', (socket) => {
 
       if (agent.type === 'python') {
         // Send command instantly to Python agent socket
-        io.to(agentId).emit('run-command', { cmd, commandId });
+        const agentSocketId = agent.socketId || agentId;
+        io.to(agentSocketId).emit('run-command', { cmd, commandId });
       } else if (agent.type === 'bash') {
         // Queue command for next HTTP poll
         if (!bashCommandQueues.has(agentId)) {
@@ -562,7 +642,8 @@ io.on('connection', (socket) => {
 
       if (agent.type === 'python') {
         // Send cancel event to python client socket
-        io.to(agentId).emit('kill-command', { commandId: agent.activeCommandId });
+        const agentSocketId = agent.socketId || agentId;
+        io.to(agentSocketId).emit('kill-command', { commandId: agent.activeCommandId });
       } else if (agent.type === 'bash') {
         // Queue a special 'kill' action for the next HTTP poll
         if (!bashCommandQueues.has(agentId)) {
@@ -590,23 +671,42 @@ io.on('connection', (socket) => {
   let agentId = socket.id;
 
   socket.on('register', (metadata) => {
-    // Register agent
-    agents.set(agentId, {
-      id: agentId,
-      hostname: metadata.hostname || 'Unknown-Python',
-      platform: metadata.platform || 'unknown',
-      ip: metadata.ip || socket.handshake.address || '127.0.0.1',
-      type: 'python',
-      status: 'online',
-      lastSeen: Date.now(),
-      metrics: {
-        cpu: metadata.cpu || 0,
-        ram: metadata.ram || 0
-      },
-      docker: metadata.docker || 'none'
-    });
+    // Register agent using persistent ID if provided
+    const persistentId = metadata.id || socket.id;
+    
+    console.log(`[DEBUG] Agent registration attempt. Provided ID: ${metadata.id}, Socket ID: ${socket.id}`);
 
-    console.log(`Python agent registered: ${metadata.hostname} (${agentId})`);
+    // If an agent with this ID already exists, preserve its properties but update the socket
+    const existingAgent = agents.get(persistentId);
+    if (existingAgent) {
+      console.log(`[DEBUG] Updating existing agent session for ${persistentId}`);
+      existingAgent.socketId = socket.id;
+      existingAgent.status = 'online';
+      existingAgent.lastSeen = Date.now();
+      // Keep old hostname/platform if not provided
+      if (metadata.hostname) existingAgent.hostname = metadata.hostname;
+      agentId = persistentId;
+    } else {
+      console.log(`[DEBUG] Creating new agent session for ${persistentId}`);
+      agentId = persistentId;
+      agents.set(persistentId, {
+        id: persistentId,
+        socketId: socket.id,
+        hostname: metadata.hostname || 'Unknown-Python',
+        platform: metadata.platform || 'unknown',
+        ip: metadata.ip || socket.handshake.address || '127.0.0.1',
+        type: 'python',
+        status: 'online',
+        lastSeen: Date.now(),
+        metrics: {
+          cpu: metadata.cpu || 0,
+          ram: metadata.ram || 0
+        },
+        docker: metadata.docker || 'none'
+      });
+    }
+
+    console.log(`Python agent registered: ${agents.get(persistentId).hostname} (${persistentId}) [Socket: ${socket.id}]`);
     broadcastAgents();
   });
 
@@ -627,18 +727,59 @@ io.on('connection', (socket) => {
 
   // Real-time output stream from Python agent
   socket.on('command-output', (data) => {
-    if (data.isEof) {
+    const { commandId, output, isEof, exitCode } = data;
+
+    // Check if this is an active download stream
+    if (activeDownloadStreams.has(commandId)) {
+      const streamRes = activeDownloadStreams.get(commandId);
+      if (output) {
+        try {
+          const cleanOutput = output.replace(/[\r\n\s]/g, '');
+          if (cleanOutput.length === 0) return;
+
+          let bufferStr = (downloadBuffers.get(commandId) || '') + cleanOutput;
+          const validLength = Math.floor(bufferStr.length / 4) * 4;
+          
+          if (validLength > 0) {
+            const toDecode = bufferStr.substring(0, validLength);
+            const decodedBuffer = Buffer.from(toDecode, 'base64');
+            console.log(`[DEBUG] Writing ${decodedBuffer.length} bytes to stream (Command: ${commandId})`);
+            streamRes.write(decodedBuffer);
+            downloadBuffers.set(commandId, bufferStr.substring(validLength));
+          } else {
+            downloadBuffers.set(commandId, bufferStr);
+          }
+        } catch (e) {
+          console.error('Error writing chunk to stream:', e);
+        }
+      }
+
+      if (isEof) {
+        const remaining = downloadBuffers.get(commandId);
+        if (remaining && remaining.length > 0) {
+          try {
+            streamRes.write(Buffer.from(remaining, 'base64'));
+          } catch (e) {}
+        }
+        activeDownloadStreams.delete(commandId);
+        downloadBuffers.delete(commandId);
+        streamRes.end();
+      }
+      return; // Don't forward file stream data to dashboard terminal
+    }
+
+    if (isEof) {
       const agent = agents.get(agentId);
-      if (agent && agent.activeCommandId === data.commandId) {
+      if (agent && agent.activeCommandId === commandId) {
         agent.activeCommandId = null;
       }
     }
     // Forward command output straight to all dashboard listeners
     io.to('dashboard').emit('command-output', {
-      commandId: data.commandId,
-      output: data.output,
-      isEof: data.isEof || false,
-      exitCode: data.exitCode
+      commandId,
+      output,
+      isEof: isEof || false,
+      exitCode
     });
   });
 
