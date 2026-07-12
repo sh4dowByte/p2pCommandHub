@@ -78,9 +78,79 @@
             <i data-lucide="layers"></i>
             Broadcast Command
           </button>
-          <button id="btn-theme-toggle" class="btn btn-secondary" title="Toggle Light/Dark Mode">
-            <i data-lucide="moon" id="theme-icon"></i>
-          </button>
+          <div class="theme-switcher-container">
+            <button id="btn-theme-toggle" class="btn btn-secondary" title="Switch Theme">
+              <i data-lucide="palette" id="theme-icon"></i>
+            </button>
+            <div class="theme-dropdown hidden" id="theme-dropdown">
+              <div class="theme-dropdown-header">Select Theme</div>
+              <div class="theme-options" style="max-height: 250px; overflow-y: auto;">
+                <button class="theme-opt-btn" data-theme="dark">
+                  <span class="theme-dot" style="background: #7da372;"></span>
+                  <span>Forest Dark</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="light">
+                  <span class="theme-dot" style="background: #4b6344;"></span>
+                  <span>Sage Light</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="dracula">
+                  <span class="theme-dot" style="background: #bd93f9;"></span>
+                  <span>Midnight Dracula</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="nord">
+                  <span class="theme-dot" style="background: #88c0d0;"></span>
+                  <span>Nordic Blizzard</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="cyberpunk">
+                  <span class="theme-dot" style="background: #ff0055;"></span>
+                  <span>Cyberpunk Neon</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="sakura">
+                  <span class="theme-dot" style="background: #e05a88;"></span>
+                  <span>Sakura Bloom</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="retro">
+                  <span class="theme-dot" style="background: #ffb000;"></span>
+                  <span>Retro Amber</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="oceanic">
+                  <span class="theme-dot" style="background: #00b4d8;"></span>
+                  <span>Oceanic Abyss</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="sunset">
+                  <span class="theme-dot" style="background: #f77f00;"></span>
+                  <span>Sunset Horizon</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="monokai">
+                  <span class="theme-dot" style="background: #a6e22e;"></span>
+                  <span>Monokai Retro</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="lavender">
+                  <span class="theme-dot" style="background: #b39ddb;"></span>
+                  <span>Lavender Fields</span>
+                </button>
+                <button class="theme-opt-btn" data-theme="custom">
+                  <span class="theme-dot" id="custom-theme-dot" style="background: linear-gradient(135deg, #ff0055, #00f0ff);"></span>
+                  <span>Custom Theme</span>
+                </button>
+              </div>
+              <div class="theme-dropdown-divider"></div>
+              <div class="theme-dropdown-header">Custom Theme Picker</div>
+              <div class="custom-theme-picker-group">
+                <div class="color-picker-row">
+                  <span class="color-picker-label">Accent Color</span>
+                  <input type="color" id="dropdown-custom-primary" value="#00b4d8">
+                </div>
+                <div class="color-picker-row">
+                  <span class="color-picker-label">Background</span>
+                  <input type="color" id="dropdown-custom-bg" value="#0a0b10">
+                </div>
+                <button class="btn btn-primary btn-full" id="btn-apply-dropdown-custom" style="padding: 6px; font-size: 0.8rem; height: auto;">
+                  Apply Custom Colors
+                </button>
+              </div>
+            </div>
+          </div>
           <button id="btn-settings-modal" class="btn btn-secondary" title="Global Settings">
             <i data-lucide="settings"></i>
           </button>
@@ -327,6 +397,14 @@
           <span class="form-help">Ensure remote clients can access this IP/domain. Defaults to this dashboard URL.</span>
         </div>
 
+        <!-- Run in Background Checkbox -->
+        <div class="form-check-group" style="margin-top: 12px; margin-bottom: 8px;">
+          <label class="form-check-label">
+            <input type="checkbox" id="agent-run-background" checked>
+            <span>Run in Background (nohup)</span>
+          </label>
+        </div>
+
         <!-- Tabs Selector -->
         <div class="agent-tabs-container">
           <div class="agent-tabs">
@@ -423,9 +501,33 @@
           <div class="form-group">
             <label for="settings-theme" class="form-label">Default Theme</label>
             <select id="settings-theme" class="form-control">
-              <option value="dark">Dark Mode</option>
-              <option value="light">Light Mode</option>
+              <option value="dark">Forest Dark</option>
+              <option value="light">Sage Light</option>
+              <option value="dracula">Midnight Dracula</option>
+              <option value="nord">Nordic Blizzard</option>
+              <option value="cyberpunk">Cyberpunk Neon</option>
+              <option value="sakura">Sakura Bloom</option>
+              <option value="retro">Retro Amber</option>
+              <option value="oceanic">Oceanic Abyss</option>
+              <option value="sunset">Sunset Horizon</option>
+              <option value="monokai">Monokai Retro</option>
+              <option value="lavender">Lavender Fields</option>
+              <option value="custom">Custom Theme</option>
             </select>
+          </div>
+
+          <div class="form-group" id="settings-custom-theme-section" style="margin-top: 12px; display: none;">
+            <label class="form-label">Custom Colors</label>
+            <div style="display: flex; gap: 16px;">
+              <div style="flex: 1;">
+                <label for="settings-custom-primary" class="form-label" style="font-size: 0.75rem; margin-bottom: 4px; display: block;">Accent Color</label>
+                <input type="color" id="settings-custom-primary" class="form-control" style="height: 38px; padding: 4px; cursor: pointer; background: none;">
+              </div>
+              <div style="flex: 1;">
+                <label for="settings-custom-bg" class="form-label" style="font-size: 0.75rem; margin-bottom: 4px; display: block;">Background Color</label>
+                <input type="color" id="settings-custom-bg" class="form-control" style="height: 38px; padding: 4px; cursor: pointer; background: none;">
+              </div>
+            </div>
           </div>
 
           <div class="form-group" style="margin-top: 12px;">

@@ -31,10 +31,119 @@ let dashboardSettings = {
   historyLimit: localStorage.getItem('historyLimit') || '100'
 };
 
-// Apply theme on load
-if (currentTheme === 'light') {
-  document.body.classList.add('light-mode');
+// Color generation helpers for custom theme picker
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null;
 }
+
+function rgbToHex(r, g, b) {
+  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+function adjustColorBrightness(hex, percent) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  const r = Math.min(255, Math.max(0, rgb.r + (percent * 2.55)));
+  const g = Math.min(255, Math.max(0, rgb.g + (percent * 2.55)));
+  const b = Math.min(255, Math.max(0, rgb.b + (percent * 2.55)));
+  return rgbToHex(Math.round(r), Math.round(g), Math.round(b));
+}
+
+function hexToRgbaStr(hex, alpha) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(0, 0, 0, ${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+function applyCustomTheme(primaryHex, bgHex) {
+  const rgbBg = hexToRgb(bgHex);
+  const isLightBg = rgbBg ? ((rgbBg.r * 299 + rgbBg.g * 587 + rgbBg.b * 114) / 1000) > 128 : false;
+
+  const bgShift = isLightBg ? -6 : 6;
+  const bgSec = adjustColorBrightness(bgHex, bgShift);
+  const bgTert = adjustColorBrightness(bgHex, bgShift * 2);
+
+  document.body.style.setProperty('--bg-primary', bgHex);
+  document.body.style.setProperty('--bg-secondary', bgSec);
+  document.body.style.setProperty('--bg-tertiary', bgTert);
+  document.body.style.setProperty('--primary', primaryHex);
+  document.body.style.setProperty('--primary-hover', adjustColorBrightness(primaryHex, isLightBg ? -10 : 10));
+  document.body.style.setProperty('--primary-glow', hexToRgbaStr(primaryHex, 0.15));
+  document.body.style.setProperty('--secondary-glow', hexToRgbaStr(primaryHex, 0.02));
+  document.body.style.setProperty('--border-color', hexToRgbaStr(primaryHex, 0.15));
+  document.body.style.setProperty('--border-color-glow', hexToRgbaStr(primaryHex, 0.3));
+  
+  if (isLightBg) {
+    document.body.style.setProperty('--text-primary', '#111827');
+    document.body.style.setProperty('--text-secondary', '#4b5563');
+    document.body.style.setProperty('--text-muted', '#9ca3af');
+    document.body.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.8)');
+    document.body.style.setProperty('--terminal-bg', '#ffffff');
+    document.body.classList.add('light-mode');
+  } else {
+    document.body.style.setProperty('--text-primary', '#f3f4f6');
+    document.body.style.setProperty('--text-secondary', '#9ca3af');
+    document.body.style.setProperty('--text-muted', '#6b7280');
+    document.body.style.setProperty('--glass-bg', 'rgba(17, 24, 39, 0.7)');
+    document.body.style.setProperty('--terminal-bg', 'rgba(0, 0, 0, 0.2)');
+    document.body.classList.remove('light-mode');
+  }
+}
+
+function clearCustomThemeStyles() {
+  document.body.style.removeProperty('--bg-primary');
+  document.body.style.removeProperty('--bg-secondary');
+  document.body.style.removeProperty('--bg-tertiary');
+  document.body.style.removeProperty('--primary');
+  document.body.style.removeProperty('--primary-hover');
+  document.body.style.removeProperty('--primary-glow');
+  document.body.style.removeProperty('--secondary-glow');
+  document.body.style.removeProperty('--border-color');
+  document.body.style.removeProperty('--border-color-glow');
+  document.body.style.removeProperty('--text-primary');
+  document.body.style.removeProperty('--text-secondary');
+  document.body.style.removeProperty('--text-muted');
+  document.body.style.removeProperty('--glass-bg');
+  document.body.style.removeProperty('--terminal-bg');
+}
+
+// Apply theme on load
+function applyThemeClass(theme) {
+  document.body.classList.remove(
+    'light-mode', 
+    'theme-dark', 
+    'theme-light', 
+    'theme-dracula', 
+    'theme-nord', 
+    'theme-cyberpunk', 
+    'theme-sakura', 
+    'theme-retro',
+    'theme-oceanic',
+    'theme-sunset',
+    'theme-monokai',
+    'theme-lavender',
+    'theme-custom'
+  );
+  if (theme === 'light') {
+    document.body.classList.add('light-mode');
+  }
+  document.body.classList.add('theme-' + theme);
+
+  if (theme === 'custom') {
+    const customPrimary = localStorage.getItem('custom-theme-primary') || '#00b4d8';
+    const customBg = localStorage.getItem('custom-theme-bg') || '#0a0b10';
+    applyCustomTheme(customPrimary, customBg);
+  } else {
+    clearCustomThemeStyles();
+  }
+}
+applyThemeClass(currentTheme);
+
 
 // DOM Elements
 const agentsContainer = document.getElementById('agents-container');
@@ -167,34 +276,142 @@ const broadcastModal = document.getElementById('broadcast-modal');
 const btnCloseBroadcast = document.getElementById('btn-close-broadcast');
 const broadcastInput = document.getElementById('broadcast-input');
 
-// Theme Toggle Handler
+// Theme Switcher & Toggle Handler
+const themeDropdown = document.getElementById('theme-dropdown');
+const dropdownCustomPrimary = document.getElementById('dropdown-custom-primary');
+const dropdownCustomBg = document.getElementById('dropdown-custom-bg');
+const btnApplyDropdownCustom = document.getElementById('btn-apply-dropdown-custom');
+
+// Set initial dropdown values from localStorage
+if (dropdownCustomPrimary && dropdownCustomBg) {
+  dropdownCustomPrimary.value = localStorage.getItem('custom-theme-primary') || '#00b4d8';
+  dropdownCustomBg.value = localStorage.getItem('custom-theme-bg') || '#0a0b10';
+}
+
 function updateThemeUI() {
-  if (currentTheme === 'light') {
-    document.body.classList.add('light-mode');
-    themeIcon.setAttribute('data-lucide', 'sun');
-    editor.setTheme("ace/theme/chrome");
-  } else {
-    document.body.classList.remove('light-mode');
-    themeIcon.setAttribute('data-lucide', 'moon');
-    editor.setTheme("ace/theme/tomorrow_night_eighties");
+  applyThemeClass(currentTheme);
+  
+  // Highlight active theme option in the dropdown
+  document.querySelectorAll('.theme-opt-btn').forEach(btn => {
+    if (btn.getAttribute('data-theme') === currentTheme) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  // Set Ace Editor theme based on active color theme
+  if (typeof editor !== 'undefined') {
+    switch (currentTheme) {
+      case 'light':
+        editor.setTheme("ace/theme/chrome");
+        break;
+      case 'cyberpunk':
+        editor.setTheme("ace/theme/chaos");
+        break;
+      case 'dracula':
+        editor.setTheme("ace/theme/dracula");
+        break;
+      case 'nord':
+      case 'oceanic':
+        editor.setTheme("ace/theme/clouds_midnight");
+        break;
+      case 'sakura':
+      case 'sunset':
+      case 'lavender':
+        editor.setTheme("ace/theme/pastel_on_dark");
+        break;
+      case 'monokai':
+        editor.setTheme("ace/theme/monokai");
+        break;
+      case 'retro':
+        editor.setTheme("ace/theme/terminal");
+        break;
+      case 'custom': {
+        const bgHex = localStorage.getItem('custom-theme-bg') || '#0a0b10';
+        const rgbBg = hexToRgb(bgHex);
+        const isLightBg = rgbBg ? ((rgbBg.r * 299 + rgbBg.g * 587 + rgbBg.b * 114) / 1000) > 128 : false;
+        editor.setTheme(isLightBg ? "ace/theme/chrome" : "ace/theme/tomorrow_night_eighties");
+        break;
+      }
+      case 'dark':
+      default:
+        editor.setTheme("ace/theme/tomorrow_night_eighties");
+        break;
+    }
   }
-  // Refresh Lucide icons for the theme toggle
+
+  // Refresh Lucide icons
   if (typeof lucide !== 'undefined') {
     lucide.createIcons();
   }
 }
 
-btnThemeToggle.addEventListener('click', () => {
-  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
-  dashboardSettings.theme = currentTheme;
-  localStorage.setItem('theme', currentTheme);
-  updateThemeUI();
-  
-  // Sync select input if settings modal is open
-  if (settingsTheme) {
-    settingsTheme.value = currentTheme;
+// Toggle Dropdown when clicking the theme icon
+btnThemeToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  themeDropdown.classList.toggle('hidden');
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (themeDropdown && !themeDropdown.classList.contains('hidden') && !e.target.closest('.theme-switcher-container')) {
+    themeDropdown.classList.add('hidden');
   }
 });
+
+// Theme Options Click Handler
+document.querySelectorAll('.theme-opt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const selectedTheme = btn.getAttribute('data-theme');
+    currentTheme = selectedTheme;
+    dashboardSettings.theme = currentTheme;
+    localStorage.setItem('theme', currentTheme);
+    updateThemeUI();
+    
+    // Sync select input if settings modal is open
+    if (settingsTheme) {
+      settingsTheme.value = currentTheme;
+      if (typeof toggleSettingsCustomThemeVisibility === 'function') {
+        toggleSettingsCustomThemeVisibility();
+      }
+    }
+    
+    // Hide dropdown
+    themeDropdown.classList.add('hidden');
+  });
+});
+
+// Dropdown Custom Picker Apply Click Handler
+if (btnApplyDropdownCustom) {
+  btnApplyDropdownCustom.addEventListener('click', () => {
+    const prim = dropdownCustomPrimary.value;
+    const bg = dropdownCustomBg.value;
+    
+    localStorage.setItem('custom-theme-primary', prim);
+    localStorage.setItem('custom-theme-bg', bg);
+    
+    currentTheme = 'custom';
+    dashboardSettings.theme = 'custom';
+    localStorage.setItem('theme', 'custom');
+    
+    updateThemeUI();
+    
+    // Sync settings modal custom controls
+    if (settingsTheme) {
+      settingsTheme.value = 'custom';
+      if (typeof toggleSettingsCustomThemeVisibility === 'function') {
+        toggleSettingsCustomThemeVisibility();
+      }
+    }
+    if (settingsCustomPrimary && settingsCustomBg) {
+      settingsCustomPrimary.value = prim;
+      settingsCustomBg.value = bg;
+    }
+    
+    themeDropdown.classList.add('hidden');
+  });
+}
 
 // Initial theme UI update
 updateThemeUI();
@@ -931,6 +1148,7 @@ const addAgentModal = document.getElementById('add-agent-modal');
 const btnAddAgentModal = document.getElementById('btn-add-agent-modal');
 const btnCloseAddAgent = document.getElementById('btn-close-add-agent');
 const agentServerHostInput = document.getElementById('agent-server-host');
+const agentRunBackgroundInput = document.getElementById('agent-run-background');
 
 const tabBtnBash = document.getElementById('tab-btn-bash');
 const tabBtnPython = document.getElementById('tab-btn-python');
@@ -957,9 +1175,16 @@ function updateInstallerCommands() {
   // Clean trailing slashes
   serverHost = serverHost.replace(/\/+$/, "");
 
+  const runBg = agentRunBackgroundInput ? agentRunBackgroundInput.checked : true;
+
   // Update textareas
-  bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && nohup ./agent.sh > /dev/null 2>&1 &`;
-  pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && nohup python3 agent.py > /dev/null 2>&1 &`;
+  if (runBg) {
+    bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && nohup ./agent.sh > /dev/null 2>&1 &`;
+    pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && nohup python3 agent.py > /dev/null 2>&1 &`;
+  } else {
+    bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && ./agent.sh`;
+    pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && python3 agent.py`;
+  }
 }
 
 // Show/Hide Modal
@@ -982,8 +1207,11 @@ btnCloseAddAgent.addEventListener('click', () => {
   addAgentModal.classList.add('hidden');
 });
 
-// Host Address Input Listener
+// Host Address and Run Mode Change Listeners
 agentServerHostInput.addEventListener('input', updateInstallerCommands);
+if (agentRunBackgroundInput) {
+  agentRunBackgroundInput.addEventListener('change', updateInstallerCommands);
+}
 
 // Tab switching
 tabBtnBash.addEventListener('click', () => {
@@ -1463,9 +1691,24 @@ const settingsPanes = document.querySelectorAll('.settings-pane');
 
 // Appearance Form Elements
 const settingsTheme = document.getElementById('settings-theme');
+const settingsCustomThemeSection = document.getElementById('settings-custom-theme-section');
+const settingsCustomPrimary = document.getElementById('settings-custom-primary');
+const settingsCustomBg = document.getElementById('settings-custom-bg');
 const settingsTerminalFontSize = document.getElementById('settings-terminal-font-size');
 const settingsTerminalFontFamily = document.getElementById('settings-terminal-font-family');
 const settingsTerminalOpacity = document.getElementById('settings-terminal-opacity');
+
+function toggleSettingsCustomThemeVisibility() {
+  if (settingsTheme && settingsTheme.value === 'custom') {
+    settingsCustomThemeSection.style.display = 'block';
+  } else {
+    settingsCustomThemeSection.style.display = 'none';
+  }
+}
+
+if (settingsTheme) {
+  settingsTheme.addEventListener('change', toggleSettingsCustomThemeVisibility);
+}
 
 // Behavior Form Elements
 const settingsSoundEnabled = document.getElementById('settings-sound-enabled');
@@ -1519,6 +1762,13 @@ async function loadSettings() {
     settingsSoundEnabled.checked = dashboardSettings.soundEnabled;
     settingsAutoClear.checked = dashboardSettings.autoClear;
     settingsHistoryLimit.value = dashboardSettings.historyLimit;
+    
+    // Load Custom Theme values if set
+    if (settingsCustomPrimary && settingsCustomBg) {
+      settingsCustomPrimary.value = localStorage.getItem('custom-theme-primary') || '#00b4d8';
+      settingsCustomBg.value = localStorage.getItem('custom-theme-bg') || '#0a0b10';
+    }
+    toggleSettingsCustomThemeVisibility();
     
   } catch (err) {
     console.error('Failed to load settings:', err);
@@ -1574,6 +1824,18 @@ btnSaveSettings.addEventListener('click', async () => {
       localStorage.setItem('soundEnabled', dashboardSettings.soundEnabled);
       localStorage.setItem('autoClear', dashboardSettings.autoClear);
       localStorage.setItem('historyLimit', dashboardSettings.historyLimit);
+
+      // Save custom theme colors if custom is selected
+      if (settingsTheme.value === 'custom') {
+        localStorage.setItem('custom-theme-primary', settingsCustomPrimary.value);
+        localStorage.setItem('custom-theme-bg', settingsCustomBg.value);
+        
+        // Sync color picker dropdown controls
+        if (dropdownCustomPrimary && dropdownCustomBg) {
+          dropdownCustomPrimary.value = settingsCustomPrimary.value;
+          dropdownCustomBg.value = settingsCustomBg.value;
+        }
+      }
 
       // 3. Apply appearance changes instantly
       applyDashboardSettings();

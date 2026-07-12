@@ -28,7 +28,7 @@ SERVER_URL="${SERVER_URL%/}"
 # Set up Persistent Agent ID
 ID_FILE="${HOME}/.p2p_bash_agent_id"
 if [ -f "$ID_FILE" ]; then
-  AGENT_ID=$(cat "$ID_FILE")
+  AGENT_ID=$(tr -d '\r\n ' < "$ID_FILE")
 else
   # Generate unique identifier (UUID/random hex fallback)
   if command -v uuidgen >/dev/null 2>&1; then
@@ -36,6 +36,8 @@ else
   else
     AGENT_ID="bash_$(od -x /dev/urandom | head -n 1 | awk '{print $2$3$4$5}')"
   fi
+  # Clean up potential carriage returns / newlines / spaces
+  AGENT_ID=$(echo "$AGENT_ID" | tr -d '\r\n ')
   echo "$AGENT_ID" > "$ID_FILE"
 fi
 

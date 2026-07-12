@@ -82,9 +82,29 @@ def check_docker():
         except:
             return "none"
 
+def get_persistent_id():
+    id_file = os.path.expanduser('~/.p2p_python_agent_id')
+    if os.path.exists(id_file):
+        try:
+            with open(id_file, 'r') as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    
+    # Generate unique identifier (UUID)
+    import uuid
+    new_id = f"python_{uuid.uuid4()}"
+    try:
+        with open(id_file, 'w') as f:
+            f.write(new_id)
+    except Exception as e:
+        print(f"Warning: Could not save persistent ID to {id_file}: {e}")
+    return new_id
+
 def get_metadata():
     metrics = get_system_metrics()
     return {
+        'id': get_persistent_id(),
         'hostname': socket.gethostname(),
         'platform': f"{platform.system()} {platform.release()}",
         'ip': get_local_ip(),

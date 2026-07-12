@@ -169,10 +169,11 @@ app.get('/api/agent/poll', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { id, hostname, platform, ip, cpu, ram, docker } = req.query;
+  let { id, hostname, platform, ip, cpu, ram, docker } = req.query;
   if (!id) {
     return res.status(400).json({ error: 'Missing client id' });
   }
+  id = id.trim();
 
   // Register or update Bash agent status
   const isNew = !agents.has(id);
@@ -225,10 +226,11 @@ app.post('/api/agent/response', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { id, commandId, output, exitCode, isEof } = req.body;
+  let { id, commandId, output, exitCode, isEof } = req.body;
   if (!id || !commandId) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
+  id = id.trim();
 
   const eof = isEof !== undefined ? (isEof === 'true' || isEof === true) : true;
 
@@ -463,7 +465,7 @@ app.get('/api/download/stream', (req, res) => {
   // Tell agent to start streaming
   const escapedPath = filePath.replace(/"/g, '\\"');
   // Bash command to output base64 chunks line by line
-  const cmd = `if [ ! -f "${escapedPath}" ]; then exit 1; fi; if command -v base64 >/dev/null 2>&1; then if command -v fold >/dev/null 2>&1; then base64 "${escapedPath}" | tr -d '\\r\\n' | fold -w 60000; else base64 "${escapedPath}"; fi; else exit 127; fi`;
+  const cmd = `if [ ! -f "${escapedPath}" ]; then exit 1; fi; (if command -v base64 >/dev/null 2>&1; then base64 "${escapedPath}"; elif command -v openssl >/dev/null 2>&1; then openssl base64 -in "${escapedPath}"; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "${escapedPath}"; elif command -v python >/dev/null 2>&1; then python -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()))' "${escapedPath}"; else echo "No base64 encoder found" >&2; exit 127; fi) | tr -d '\\r\\n' | fold -w 45000`;
 
   if (agent.type === 'python') {
     const pythonCmd = `__STREAM_FILE__:${filePath}`;
@@ -565,7 +567,7 @@ io.on('connection', (socket) => {
         agent.activeCommandId = commandId;
 
         const escapedPath = path.replace(/"/g, '\\"');
-        const cmd = `FILE_SIZE=$(stat -c%s "${escapedPath}" 2>/dev/null || stat -f%z "${escapedPath}" 2>/dev/null || echo 0); if [ "$FILE_SIZE" -gt 52428800 ]; then echo "Error: File too large (Max 50MB)" >&2; exit 1; fi; if command -v base64 >/dev/null 2>&1; then base64 -i "${escapedPath}" 2>/dev/null || base64 "${escapedPath}"; elif command -v openssl >/dev/null 2>&1; then openssl base64 -in "${escapedPath}"; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "${escapedPath}"; elif command -v python >/dev/null 2>&1; then python -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()))' "${escapedPath}"; else echo "No base64 encoder found" >&2; exit 127; fi`;
+        const cmd = `FILE_SIZE=$(stat -c%s "${escapedPath}" 2>/dev/null || stat -f%z "${escapedPath}" 2>/dev/null || echo 0); if [ "$FILE_SIZE" -gt 52428800 ]; then echo "Error: File too large (Max 50MB)" >&2; exit 1; fi; (if command -v base64 >/dev/null 2>&1; then base64 "${escapedPath}"; elif command -v openssl >/dev/null 2>&1; then openssl base64 -in "${escapedPath}"; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "${escapedPath}"; elif command -v python >/dev/null 2>&1; then python -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()))' "${escapedPath}"; else echo "No base64 encoder found" >&2; exit 127; fi) | tr -d '\\r\\n' | fold -w 45000`;
 
         if (!bashCommandQueues.has(agentId)) {
           bashCommandQueues.set(agentId, []);
@@ -672,7 +674,7 @@ io.on('connection', (socket) => {
 
   socket.on('register', (metadata) => {
     // Register agent using persistent ID if provided
-    const persistentId = metadata.id || socket.id;
+    const persistentId = (metadata.id || socket.id).trim();
     
     console.log(`[DEBUG] Agent registration attempt. Provided ID: ${metadata.id}, Socket ID: ${socket.id}`);
 

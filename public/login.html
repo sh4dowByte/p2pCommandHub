@@ -14,7 +14,7 @@
             font-family: 'Outfit', sans-serif;
             background: 
                 radial-gradient(at 0% 0%, var(--primary-glow) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(125, 163, 114, 0.03) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, var(--secondary-glow) 0px, transparent 50%),
                 var(--bg-primary);
             height: 100vh;
             display: flex;
@@ -174,10 +174,79 @@
     </div>
 
     <script>
-        // Theme Detection
+        // Theme Detection & Application
         const currentTheme = localStorage.getItem('theme') || 'dark';
+        document.body.className = '';
         if (currentTheme === 'light') {
             document.body.classList.add('light-mode');
+        }
+        document.body.classList.add('theme-' + currentTheme);
+
+        if (currentTheme === 'custom') {
+            // Apply custom theme colors if set
+            const primaryHex = localStorage.getItem('custom-theme-primary') || '#00b4d8';
+            const bgHex = localStorage.getItem('custom-theme-bg') || '#0a0b10';
+
+            function hexToRgb(hex) {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : null;
+            }
+
+            function rgbToHex(r, g, b) {
+                return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+            }
+
+            function adjustColorBrightness(hex, percent) {
+                const rgb = hexToRgb(hex);
+                if (!rgb) return hex;
+                const r = Math.min(255, Math.max(0, rgb.r + (percent * 2.55)));
+                const g = Math.min(255, Math.max(0, rgb.g + (percent * 2.55)));
+                const b = Math.min(255, Math.max(0, rgb.b + (percent * 2.55)));
+                return rgbToHex(Math.round(r), Math.round(g), Math.round(b));
+            }
+
+            function hexToRgbaStr(hex, alpha) {
+                const rgb = hexToRgb(hex);
+                if (!rgb) return `rgba(0, 0, 0, ${alpha})`;
+                return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+            }
+
+            const rgbBg = hexToRgb(bgHex);
+            const isLightBg = rgbBg ? ((rgbBg.r * 299 + rgbBg.g * 587 + rgbBg.b * 114) / 1000) > 128 : false;
+
+            const bgShift = isLightBg ? -6 : 6;
+            const bgSec = adjustColorBrightness(bgHex, bgShift);
+            const bgTert = adjustColorBrightness(bgHex, bgShift * 2);
+
+            document.body.style.setProperty('--bg-primary', bgHex);
+            document.body.style.setProperty('--bg-secondary', bgSec);
+            document.body.style.setProperty('--bg-tertiary', bgTert);
+            document.body.style.setProperty('--primary', primaryHex);
+            document.body.style.setProperty('--primary-hover', adjustColorBrightness(primaryHex, isLightBg ? -10 : 10));
+            document.body.style.setProperty('--primary-glow', hexToRgbaStr(primaryHex, 0.15));
+            document.body.style.setProperty('--secondary-glow', hexToRgbaStr(primaryHex, 0.02));
+            document.body.style.setProperty('--border-color', hexToRgbaStr(primaryHex, 0.15));
+            document.body.style.setProperty('--border-color-glow', hexToRgbaStr(primaryHex, 0.3));
+            
+            if (isLightBg) {
+                document.body.style.setProperty('--text-primary', '#111827');
+                document.body.style.setProperty('--text-secondary', '#4b5563');
+                document.body.style.setProperty('--text-muted', '#9ca3af');
+                document.body.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.8)');
+                document.body.style.setProperty('--terminal-bg', '#ffffff');
+                document.body.classList.add('light-mode');
+            } else {
+                document.body.style.setProperty('--text-primary', '#f3f4f6');
+                document.body.style.setProperty('--text-secondary', '#9ca3af');
+                document.body.style.setProperty('--text-muted', '#6b7280');
+                document.body.style.setProperty('--glass-bg', 'rgba(17, 24, 39, 0.7)');
+                document.body.style.setProperty('--terminal-bg', 'rgba(0, 0, 0, 0.2)');
+                document.body.classList.remove('light-mode');
+            }
         }
         
         lucide.createIcons();
