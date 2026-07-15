@@ -2,7 +2,8 @@ node_modules
 npm-debug.log
 .git
 .gitignore
-client-python/__pycache__
+agents/python/__pycache__
+**/__pycache__
 *.pyc
 *.pyo
 *.pyd

@@ -2,10 +2,10 @@
   "name": "p2pcmd-server",
   "version": "1.0.0",
   "description": "P2P Remote CLI/CMD Management Server",
-  "main": "server.js",
+  "main": "server/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

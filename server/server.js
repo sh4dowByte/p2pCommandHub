@@ -14,7 +14,7 @@ let CONFIG = {
 };
 
 try {
-  const configFile = fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8');
+  const configFile = fs.readFileSync(path.join(__dirname, '..', 'config.json'), 'utf8');
   const fileConfig = JSON.parse(configFile);
   CONFIG = { ...CONFIG, ...fileConfig };
 } catch (err) {
@@ -135,7 +135,7 @@ function broadcastAgents() {
 app.get('/install-bash', (req, res) => {
   const hostUrl = CONFIG.server_url || (req.protocol + '://' + req.get('host'));
   try {
-    let script = fs.readFileSync(path.join(__dirname, 'client-bash', 'agent.sh'), 'utf8');
+    let script = fs.readFileSync(path.join(__dirname, '..', 'agents', 'bash', 'agent.sh'), 'utf8');
     script = script.replace(/SERVER_URL="http:\/\/localhost:3000"/g, `SERVER_URL="${hostUrl}"`);
     script = script.replace(/SECRET_TOKEN="p2p_secure_agent_token_2026"/g, `SECRET_TOKEN="${CONFIG.secret_token}"`);
     res.setHeader('Content-Type', 'text/plain');
@@ -149,7 +149,7 @@ app.get('/install-bash', (req, res) => {
 app.get('/install-python', (req, res) => {
   const hostUrl = CONFIG.server_url || (req.protocol + '://' + req.get('host'));
   try {
-    let script = fs.readFileSync(path.join(__dirname, 'client-python', 'agent.py'), 'utf8');
+    let script = fs.readFileSync(path.join(__dirname, '..', 'agents', 'python', 'agent.py'), 'utf8');
     script = script.replace(/SERVER_URL = "http:\/\/localhost:3000"/g, `SERVER_URL = "${hostUrl}"`);
     script = script.replace(/SECRET_TOKEN = "p2p_secure_agent_token_2026"/g, `SECRET_TOKEN = "${CONFIG.secret_token}"`);
     res.setHeader('Content-Type', 'text/plain');
@@ -437,7 +437,7 @@ app.post('/api/config', (req, res) => {
   };
   
   try {
-    fs.writeFileSync(path.join(__dirname, 'config.json'), JSON.stringify(configToSave, null, 2), 'utf8');
+    fs.writeFileSync(path.join(__dirname, '..', 'config.json'), JSON.stringify(configToSave, null, 2), 'utf8');
     console.log('Server configuration updated:', configToSave);
     return res.json({ status: 'success', message: 'Configuration saved successfully.' });
   } catch (err) {

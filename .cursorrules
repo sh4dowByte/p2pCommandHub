@@ -1,0 +1,35 @@
+# P2P Command Hub - Cursor Rules
+
+## Tech Stack & Architecture
+- **Server Backend**: Node.js (CommonJS, Express, Socket.io)
+- **Control Panel Web UI**: HTML5, Vanilla CSS, Vanilla JS, Lucide Icons, Ace Editor
+- **Python Agent**: Python 3 (standard library + `websockets` package)
+- **Bash Agent**: POSIX-compliant Bash script (minimal dependencies, `curl`/`sleep` loop)
+
+## Directory Structure
+- `/server/`: Contains control hub backend and dashboard files
+  - `/server/server.js`: Node.js server entry point
+  - `/server/public/`: Static web UI assets
+    - `/css/style.css`: Dashboard CSS stylesheet
+    - `/js/app.js`: Dashboard client-side JS logic
+- `/agents/`: Unified agent clients
+  - `/agents/python/`: Python-based cross-platform agent (`agent.py`, `requirements.txt`)
+  - `/agents/bash/`: Lightweight Bash agent (`agent.sh`)
+- `/config.json`: Server-side configuration (secrets, keys, URL) at root (volume-mounted)
+
+## General Coding Standards
+- **Keep it Simple (YAGNI)**: Avoid adding external libraries unless strictly necessary. Reach for standard library or native platform features first.
+- **Vanilla Frontend**: Do NOT introduce frontend frameworks (React, Vue, Tailwind, etc.). Stick to the existing Vanilla CSS custom theme and Vanilla JS.
+- **Agent Footprint**: Agents must remain extremely lightweight, using minimal CPU/RAM in idle state.
+- **Connection Model**: Agents perform inbound connections to the server to bypass NAT/firewalls.
+
+## Code Conventions
+- **Node.js**: Use CommonJS (`require`). Handle asynchronous operations with `async/await` and proper error catch blocks.
+- **Frontend CSS**: Use the established CSS custom properties (variables) for themes (Forest Dark, Sage Light, Midnight Dracula, Nord, etc.).
+- **Python**: Support Python 3.6+. Ensure standard subprocess execution is safe, handle stderr/stdout streaming, and catch exceptions to prevent crash loops.
+- **Bash**: Ensure compatibility with generic Linux and macOS shells. Do not use non-standard tools.
+
+## Security Rules
+- **Authentication**: All agent endpoints (WebSocket/HTTP API) must validate the HTTP Authorization header or request token against `secret_token` from `config.json`.
+- **Command Blacklist**: Prevent critical commands that block indefinitely or destructively wipe root without force prompts (e.g., raw `rm -rf /` without checks) if requested.
+- **SSL/TLS**: All production environments must use HTTPS/WSS.
