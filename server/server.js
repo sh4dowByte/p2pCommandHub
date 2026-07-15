@@ -50,28 +50,52 @@ const isAuthenticated = (req, res, next) => {
   if (req.session && req.session.authenticated) {
     return next();
   }
-  if (req.path === '/login' || req.path === '/api/login' || req.path.startsWith('/install-') || req.path.startsWith('/api/agent/')) {
+  if (req.path === '/' || req.path === '/login' || req.path === '/api/login' || req.path.startsWith('/install-') || req.path.startsWith('/api/agent/')) {
     return next();
   }
-  if (req.path.endsWith('.css') || req.path.endsWith('.js') || req.path.endsWith('.png') || req.path.endsWith('.jpg') || req.path.endsWith('.svg')) {
+  if (req.path.endsWith('.css') || req.path.endsWith('.js') || req.path.endsWith('.png') || req.path.endsWith('.jpg') || req.path.endsWith('.svg') || req.path.endsWith('.ico')) {
     return next();
   }
   
   if (req.xhr || req.path.startsWith('/api/')) {
     return res.status(401).json({ error: 'Unauthorized' });
   } else {
+    const reactIndex = path.join(__dirname, '..', 'frontend', 'dist', 'index.html');
+    if (fs.existsSync(reactIndex)) {
+      return res.sendFile(reactIndex);
+    }
     return res.redirect('/login');
   }
 };
 
 app.use(isAuthenticated);
+
+const distPath = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/login', (req, res) => {
   if (req.session.authenticated) {
     return res.redirect('/');
   }
+  const reactIndex = path.join(__dirname, '..', 'frontend', 'dist', 'index.html');
+  if (fs.existsSync(reactIndex)) {
+    return res.sendFile(reactIndex);
+  }
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/install-')) {
+    return next();
+  }
+  const reactIndex = path.join(__dirname, '..', 'frontend', 'dist', 'index.html');
+  if (fs.existsSync(reactIndex)) {
+    return res.sendFile(reactIndex);
+  }
+  next();
 });
 
 app.post('/api/login', (req, res) => {
