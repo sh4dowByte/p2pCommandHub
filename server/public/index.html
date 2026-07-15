@@ -437,16 +437,27 @@
             <p class="tab-help">Paste this into your target system console. Downloads the client script, sets up socket dependencies, and runs the service.</p>
           </div>
 
-          <!-- PowerShell (Windows) Tab Content -->
+          <!-- PowerShell / CMD (Windows) Tab Content -->
           <div class="tab-content hidden" id="tab-content-powershell">
-            <p class="tab-desc">For Windows servers. Uses PowerShell HTTP polling — no Python or additional runtime needed.</p>
+            <p class="tab-desc">For Windows servers. No Python or additional runtime needed. Commands run via <code>cmd.exe</code> — supports all CMD &amp; PowerShell commands.</p>
+
+            <p class="form-label" style="margin-bottom:6px;font-size:12px;opacity:.7;">▸ PowerShell (recommended)</p>
             <div class="code-copy-container">
               <textarea id="powershell-install-cmd" readonly class="code-block"></textarea>
               <button class="btn btn-primary btn-copy" id="btn-copy-powershell">
                 <i data-lucide="copy" class="icon-sm"></i> Copy
               </button>
             </div>
-            <p class="tab-help">Paste into PowerShell (Run as Administrator recommended). Downloads agent.ps1 and starts it. Set ExecutionPolicy if needed: <code>Set-ExecutionPolicy RemoteSigned</code></p>
+            <p class="tab-help" style="margin-bottom:12px;">Open PowerShell, paste and run. Tip: if blocked, first run <code>Set-ExecutionPolicy Bypass -Scope Process</code></p>
+
+            <p class="form-label" style="margin-bottom:6px;font-size:12px;opacity:.7;">▸ CMD (Command Prompt) — Windows 10 1803+</p>
+            <div class="code-copy-container">
+              <textarea id="cmd-install-cmd" readonly class="code-block"></textarea>
+              <button class="btn btn-primary btn-copy" id="btn-copy-cmd">
+                <i data-lucide="copy" class="icon-sm"></i> Copy
+              </button>
+            </div>
+            <p class="tab-help">Open <code>cmd.exe</code>, paste and run. Uses built-in <code>curl</code> to download then launches agent via PowerShell.</p>
           </div>
         </div>
       </div>

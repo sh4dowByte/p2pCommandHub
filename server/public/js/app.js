@@ -98,9 +98,11 @@ const tabContentPowershell = document.getElementById('tab-content-powershell');
 const bashInstallCmd = document.getElementById('bash-install-cmd');
 const pythonInstallCmd = document.getElementById('python-install-cmd');
 const powershellInstallCmd = document.getElementById('powershell-install-cmd');
+const cmdInstallCmd = document.getElementById('cmd-install-cmd');
 const btnCopyBash = document.getElementById('btn-copy-bash');
 const btnCopyPython = document.getElementById('btn-copy-python');
 const btnCopyPowershell = document.getElementById('btn-copy-powershell');
+const btnCopyCmd = document.getElementById('btn-copy-cmd');
 
 // Set initial dropdown values from localStorage
 if (dropdownCustomPrimary && dropdownCustomBg) {
@@ -654,11 +656,17 @@ export function updateInstallerCommands() {
     if (powershellInstallCmd) {
       powershellInstallCmd.value = `Invoke-WebRequest -Uri "${serverHost}/install-powershell" -OutFile agent.ps1; Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File agent.ps1" -WindowStyle Hidden`;
     }
+    if (cmdInstallCmd) {
+      cmdInstallCmd.value = `curl -sSL ${serverHost}/install-powershell -o agent.ps1 && start /b powershell -NoProfile -ExecutionPolicy Bypass -File agent.ps1`;
+    }
   } else {
     bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && ./agent.sh`;
     pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && python3 agent.py`;
     if (powershellInstallCmd) {
       powershellInstallCmd.value = `Invoke-WebRequest -Uri "${serverHost}/install-powershell" -OutFile agent.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File agent.ps1`;
+    }
+    if (cmdInstallCmd) {
+      cmdInstallCmd.value = `curl -sSL ${serverHost}/install-powershell -o agent.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File agent.ps1`;
     }
   }
 }
@@ -758,6 +766,12 @@ btnCopyPython.addEventListener('click', () => {
 if (btnCopyPowershell) {
   btnCopyPowershell.addEventListener('click', () => {
     copyTextToClipboard(powershellInstallCmd, btnCopyPowershell);
+  });
+}
+
+if (btnCopyCmd) {
+  btnCopyCmd.addEventListener('click', () => {
+    copyTextToClipboard(cmdInstallCmd, btnCopyCmd);
   });
 }
 
