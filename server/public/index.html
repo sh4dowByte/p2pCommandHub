@@ -408,8 +408,9 @@
         <!-- Tabs Selector -->
         <div class="agent-tabs-container">
           <div class="agent-tabs">
-            <button class="tab-btn active" id="tab-btn-bash">Bash Client (Linux/macOS)</button>
-            <button class="tab-btn" id="tab-btn-python">Python Client (Cross-Platform)</button>
+            <button class="tab-btn active" id="tab-btn-bash">Bash (Linux/macOS)</button>
+            <button class="tab-btn" id="tab-btn-python">Python (Cross-Platform)</button>
+            <button class="tab-btn" id="tab-btn-powershell">PowerShell (Windows)</button>
           </div>
 
           <!-- Bash Tab Content -->
@@ -434,6 +435,18 @@
               </button>
             </div>
             <p class="tab-help">Paste this into your target system console. Downloads the client script, sets up socket dependencies, and runs the service.</p>
+          </div>
+
+          <!-- PowerShell (Windows) Tab Content -->
+          <div class="tab-content hidden" id="tab-content-powershell">
+            <p class="tab-desc">For Windows servers. Uses PowerShell HTTP polling — no Python or additional runtime needed.</p>
+            <div class="code-copy-container">
+              <textarea id="powershell-install-cmd" readonly class="code-block"></textarea>
+              <button class="btn btn-primary btn-copy" id="btn-copy-powershell">
+                <i data-lucide="copy" class="icon-sm"></i> Copy
+              </button>
+            </div>
+            <p class="tab-help">Paste into PowerShell (Run as Administrator recommended). Downloads agent.ps1 and starts it. Set ExecutionPolicy if needed: <code>Set-ExecutionPolicy RemoteSigned</code></p>
           </div>
         </div>
       </div>

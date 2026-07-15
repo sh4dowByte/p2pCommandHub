@@ -27,6 +27,16 @@ The system supports two agent implementations, targeting different server enviro
   - Basic file browsing (using standard `ls` and formatting helper).
   - Basic CPU/RAM reporting.
 
+### PowerShell Agent (`/agents/powershell/agent.ps1`)
+- **Windows Agent**: Designed for Windows servers running PowerShell 5.1+ (included in Windows 8+) or PowerShell 7+.
+- **Protocol**: HTTP Polling (same as Bash agent — poll via HTTP GET, send output via HTTP POST).
+- **Capabilities**:
+  - No external dependencies required — uses built-in `Invoke-WebRequest` and WMI.
+  - Command execution via `cmd.exe /c` (supports CMD built-ins, batch files, and any installed tool).
+  - File browsing (directory listing and download via PowerShell Base64 encoding).
+  - CPU/RAM reporting using WMI (`Win32_Processor`, `Win32_OperatingSystem`).
+  - Auto-detected as `powershell` type via `ps_` ID prefix.
+
 ---
 
 ## 2. Communication Protocols & Lifecycle
@@ -133,6 +143,14 @@ When execution finishes or streams chunks, the Bash agent posts the response bac
 ## 3. Dynamic Installer System
 
 The Node.js server serves pre-configured installer endpoints. These dynamically inject the correct `SERVER_URL` and `SECRET_TOKEN` into the script before serving them.
+
+### Installing PowerShell Agent (Windows)
+Retrieve and run the PowerShell agent payload directly (in PowerShell):
+```powershell
+Invoke-WebRequest -Uri http://<server-ip>:3000/install-powershell -OutFile agent.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File agent.ps1
+```
+*(Run as Administrator. To run in background: use `Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File agent.ps1" -WindowStyle Hidden`)*
 
 ### Installing Python Agent
 Retrieve and run the Python agent payload directly:

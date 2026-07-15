@@ -121,15 +121,15 @@ const pendingDockerList = new Map(); // commandId -> { socketId, chunks: [] }
 const activeDownloadStreams = new Map(); // commandId -> express response object
 const downloadBuffers = new Map(); // commandId -> Buffer
 
-// Helper to cleanup stale Bash agents (e.g. no poll in 15 seconds)
+// Helper to cleanup stale poll-based agents (Bash/PowerShell) — no poll in 15 seconds
 setInterval(() => {
   const now = Date.now();
   let changed = false;
   for (const [id, agent] of agents.entries()) {
-    if (agent.type === 'bash' && agent.status === 'online' && now - agent.lastSeen > 15000) {
+    if ((agent.type === 'bash' || agent.type === 'powershell') && agent.status === 'online' && now - agent.lastSeen > 15000) {
       agent.status = 'offline';
       changed = true;
-      console.log(`Bash agent offline (timeout): ${agent.hostname} (${id})`);
+      console.log(`${agent.type} agent offline (timeout): ${agent.hostname} (${id})`);
     }
   }
   if (changed) {
@@ -184,8 +184,22 @@ app.get('/install-python', (req, res) => {
   }
 });
 
+app.get('/install-powershell', (req, res) => {
+  const hostUrl = CONFIG.server_url || (req.protocol + '://' + req.get('host'));
+  try {
+    let script = fs.readFileSync(path.join(__dirname, '..', 'agents', 'powershell', 'agent.ps1'), 'utf8');
+    script = script.replace(/\$SERVER_URL = "http:\/\/localhost:3000"/g, `\$SERVER_URL = "${hostUrl}"`);
+    script = script.replace(/\$SECRET_TOKEN = "p2p_secure_agent_token_2026"/g, `\$SECRET_TOKEN = "${CONFIG.secret_token}"`);
+    res.setHeader('Content-Type', 'text/plain');
+    return res.send(script);
+  } catch (err) {
+    console.error('Error serving install-powershell:', err);
+    return res.status(500).send('Error generating installer script: ' + err.message);
+  }
+});
+
 // ----------------------------------------------------
-// Bash Agent HTTP API
+// Bash / PowerShell Agent HTTP API
 // ----------------------------------------------------
 app.get('/api/agent/poll', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1] || req.query.token;
@@ -193,23 +207,26 @@ app.get('/api/agent/poll', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  let { id, hostname, platform, ip, cpu, ram, docker } = req.query;
+  let { id, hostname, platform, ip, cpu, ram, docker, agenttype } = req.query;
   if (!id) {
     return res.status(400).json({ error: 'Missing client id' });
   }
   id = id.trim();
 
-  // Register or update Bash agent status
+  // Detect agent type from id prefix or explicit agenttype param
+  const detectedType = agenttype || (id.startsWith('ps_') ? 'powershell' : 'bash');
+
+  // Register or update poll-based agent status
   const isNew = !agents.has(id);
   const existingAgent = agents.get(id);
   const activeCommandId = existingAgent ? existingAgent.activeCommandId : null;
 
   agents.set(id, {
     id,
-    hostname: hostname || 'Unknown-Bash',
-    platform: platform || 'linux',
+    hostname: hostname || (detectedType === 'powershell' ? 'Unknown-Windows' : 'Unknown-Bash'),
+    platform: platform || (detectedType === 'powershell' ? 'Windows' : 'linux'),
     ip: ip || req.ip,
-    type: 'bash',
+    type: detectedType,
     status: 'online',
     lastSeen: Date.now(),
     metrics: {
@@ -221,7 +238,7 @@ app.get('/api/agent/poll', (req, res) => {
   });
 
   if (isNew) {
-    console.log(`New Bash agent connected: ${hostname} (${id})`);
+    console.log(`New ${detectedType} agent connected: ${hostname} (${id})`);  
   }
 
   if (isNew || agents.get(id).status === 'offline') {
@@ -561,6 +578,20 @@ io.on('connection', (socket) => {
           bashCommandQueues.set(agentId, []);
         }
         bashCommandQueues.get(agentId).push({ commandId, cmd });
+      } else if (agent.type === 'powershell') {
+        const commandId = 'fb_list_' + Math.random().toString(36).substring(2, 11);
+        pendingFileBrowse.set(commandId, { socketId: socket.id, type: 'list', path, chunks: [], sep: '\\' });
+
+        agent.activeCommandId = commandId;
+
+        // PowerShell command for folder listing
+        const psPath = (path || '.').replace(/'/g, "''");
+        const cmd = `powershell -NoProfile -Command "$p = '${psPath}'; Write-Output $p; Get-ChildItem -Force -LiteralPath $p | ForEach-Object { $type = if ($_.PSIsContainer) { 'd' } else { 'f' }; $size = if ($_.PSIsContainer) { 0 } else { $_.Length }; $mtime = [int][double]::Parse(($_.LastWriteTimeUtc - [datetime]'1970-01-01').TotalSeconds.ToString('F0')); Write-Output ($type + '|' + $_.Name + '|' + $size + '|' + $mtime) }"`;
+
+        if (!bashCommandQueues.has(agentId)) {
+          bashCommandQueues.set(agentId, []);
+        }
+        bashCommandQueues.get(agentId).push({ commandId, cmd });
       }
     });
 
@@ -592,6 +623,19 @@ io.on('connection', (socket) => {
 
         const escapedPath = path.replace(/"/g, '\\"');
         const cmd = `FILE_SIZE=$(stat -c%s "${escapedPath}" 2>/dev/null || stat -f%z "${escapedPath}" 2>/dev/null || echo 0); if [ "$FILE_SIZE" -gt 52428800 ]; then echo "Error: File too large (Max 50MB)" >&2; exit 1; fi; (if command -v base64 >/dev/null 2>&1; then base64 "${escapedPath}"; elif command -v openssl >/dev/null 2>&1; then openssl base64 -in "${escapedPath}"; elif command -v python3 >/dev/null 2>&1; then python3 -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()).decode())' "${escapedPath}"; elif command -v python >/dev/null 2>&1; then python -c 'import base64, sys; sys.stdout.write(base64.b64encode(open(sys.argv[1], "rb").read()))' "${escapedPath}"; else echo "No base64 encoder found" >&2; exit 127; fi) | tr -d '\\r\\n' | fold -w 45000`;
+
+        if (!bashCommandQueues.has(agentId)) {
+          bashCommandQueues.set(agentId, []);
+        }
+        bashCommandQueues.get(agentId).push({ commandId, cmd });
+      } else if (agent.type === 'powershell') {
+        const commandId = 'fb_dl_' + Math.random().toString(36).substring(2, 11);
+        pendingFileBrowse.set(commandId, { socketId: socket.id, type: 'download', path, chunks: [] });
+
+        agent.activeCommandId = commandId;
+
+        const psPath = path.replace(/'/g, "''");
+        const cmd = `powershell -NoProfile -Command "$f='${psPath}'; $b=[System.IO.File]::ReadAllBytes($f); if($b.Length -gt 52428800){Write-Error 'File too large';exit 1}; $enc=[Convert]::ToBase64String($b); $i=0; while($i -lt $enc.Length){Write-Output $enc.Substring($i,[Math]::Min(45000,$enc.Length-$i)); $i+=45000}"`;
 
         if (!bashCommandQueues.has(agentId)) {
           bashCommandQueues.set(agentId, []);
@@ -647,7 +691,7 @@ io.on('connection', (socket) => {
         // Send command instantly to Python agent socket
         const agentSocketId = agent.socketId || agentId;
         io.to(agentSocketId).emit('run-command', { cmd, commandId });
-      } else if (agent.type === 'bash') {
+      } else if (agent.type === 'bash' || agent.type === 'powershell') {
         // Queue command for next HTTP poll
         if (!bashCommandQueues.has(agentId)) {
           bashCommandQueues.set(agentId, []);
@@ -670,7 +714,7 @@ io.on('connection', (socket) => {
         // Send cancel event to python client socket
         const agentSocketId = agent.socketId || agentId;
         io.to(agentSocketId).emit('kill-command', { commandId: agent.activeCommandId });
-      } else if (agent.type === 'bash') {
+      } else if (agent.type === 'bash' || agent.type === 'powershell') {
         // Queue a special 'kill' action for the next HTTP poll
         if (!bashCommandQueues.has(agentId)) {
           bashCommandQueues.set(agentId, []);

@@ -91,12 +91,16 @@ const agentServerHostInput = document.getElementById('agent-server-host');
 const agentRunBackgroundInput = document.getElementById('agent-run-background');
 const tabBtnBash = document.getElementById('tab-btn-bash');
 const tabBtnPython = document.getElementById('tab-btn-python');
+const tabBtnPowershell = document.getElementById('tab-btn-powershell');
 const tabContentBash = document.getElementById('tab-content-bash');
 const tabContentPython = document.getElementById('tab-content-python');
+const tabContentPowershell = document.getElementById('tab-content-powershell');
 const bashInstallCmd = document.getElementById('bash-install-cmd');
 const pythonInstallCmd = document.getElementById('python-install-cmd');
+const powershellInstallCmd = document.getElementById('powershell-install-cmd');
 const btnCopyBash = document.getElementById('btn-copy-bash');
 const btnCopyPython = document.getElementById('btn-copy-python');
+const btnCopyPowershell = document.getElementById('btn-copy-powershell');
 
 // Set initial dropdown values from localStorage
 if (dropdownCustomPrimary && dropdownCustomBg) {
@@ -647,9 +651,15 @@ export function updateInstallerCommands() {
   if (runBg) {
     bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && nohup ./agent.sh > /dev/null 2>&1 &`;
     pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && nohup python3 agent.py > /dev/null 2>&1 &`;
+    if (powershellInstallCmd) {
+      powershellInstallCmd.value = `Invoke-WebRequest -Uri "${serverHost}/install-powershell" -OutFile agent.ps1; Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File agent.ps1" -WindowStyle Hidden`;
+    }
   } else {
     bashInstallCmd.value = `curl -sSL ${serverHost}/install-bash > agent.sh && chmod +x agent.sh && ./agent.sh`;
     pythonInstallCmd.value = `curl -sSL ${serverHost}/install-python > agent.py && pip3 install "python-socketio[client]" psutil --prefer-binary && python3 agent.py`;
+    if (powershellInstallCmd) {
+      powershellInstallCmd.value = `Invoke-WebRequest -Uri "${serverHost}/install-powershell" -OutFile agent.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File agent.ps1`;
+    }
   }
 }
 
@@ -679,16 +689,31 @@ if (agentRunBackgroundInput) {
 tabBtnBash.addEventListener('click', () => {
   tabBtnBash.classList.add('active');
   tabBtnPython.classList.remove('active');
+  if (tabBtnPowershell) tabBtnPowershell.classList.remove('active');
   tabContentBash.classList.remove('hidden');
   tabContentPython.classList.add('hidden');
+  if (tabContentPowershell) tabContentPowershell.classList.add('hidden');
 });
 
 tabBtnPython.addEventListener('click', () => {
   tabBtnPython.classList.add('active');
   tabBtnBash.classList.remove('active');
+  if (tabBtnPowershell) tabBtnPowershell.classList.remove('active');
   tabContentPython.classList.remove('hidden');
   tabContentBash.classList.add('hidden');
+  if (tabContentPowershell) tabContentPowershell.classList.add('hidden');
 });
+
+if (tabBtnPowershell) {
+  tabBtnPowershell.addEventListener('click', () => {
+    tabBtnPowershell.classList.add('active');
+    tabBtnBash.classList.remove('active');
+    tabBtnPython.classList.remove('active');
+    tabContentPowershell.classList.remove('hidden');
+    tabContentBash.classList.add('hidden');
+    tabContentPython.classList.add('hidden');
+  });
+}
 
 function copyTextToClipboard(textareaElement, buttonElement) {
   textareaElement.select();
@@ -729,6 +754,12 @@ btnCopyBash.addEventListener('click', () => {
 btnCopyPython.addEventListener('click', () => {
   copyTextToClipboard(pythonInstallCmd, btnCopyPython);
 });
+
+if (btnCopyPowershell) {
+  btnCopyPowershell.addEventListener('click', () => {
+    copyTextToClipboard(powershellInstallCmd, btnCopyPowershell);
+  });
+}
 
 // Tabs UI Event Listeners
 tabBtnTerminal.addEventListener('click', () => switchTab('terminal'));
