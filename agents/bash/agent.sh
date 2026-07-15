@@ -203,28 +203,49 @@ while true; do
       # Stream output asynchronously so the main loop can continue polling immediately
       (
         exec 3< "$LOG_FILE"
-        while true; do
-          if IFS= read -r line <&3; then
+        BATCH=""
+        BATCH_LINES=0
+        BATCH_LINES_MAX=20   # flush every 20 lines
+        BATCH_BYTES_MAX=2048 # or every 2KB
+
+        flush_batch() {
+          if [ -n "$BATCH" ]; then
             curl -s -X POST "${SERVER_URL}/api/agent/response" \
               --data-urlencode "token=${SECRET_TOKEN}" \
               --data-urlencode "id=${AGENT_ID}" \
               --data-urlencode "commandId=${COMMAND_ID}" \
-              --data-urlencode "output=${line}
-" \
+              --data-urlencode "output=${BATCH}" \
               --data-urlencode "isEof=false" > /dev/null
+            BATCH=""
+            BATCH_LINES=0
+          fi
+        }
+
+        while true; do
+          if IFS= read -r line <&3; then
+            BATCH="${BATCH}${line}
+"
+            BATCH_LINES=$((BATCH_LINES + 1))
+            BATCH_LEN=${#BATCH}
+            if [ "$BATCH_LINES" -ge "$BATCH_LINES_MAX" ] || [ "$BATCH_LEN" -ge "$BATCH_BYTES_MAX" ]; then
+              flush_batch
+            fi
           elif ! kill -0 $CMD_PID 2>/dev/null; then
-            # Stream any final remaining lines after exit
+            # Drain any remaining lines after process exits
             while IFS= read -r line <&3 || [ -n "$line" ]; do
-              curl -s -X POST "${SERVER_URL}/api/agent/response" \
-                --data-urlencode "token=${SECRET_TOKEN}" \
-                --data-urlencode "id=${AGENT_ID}" \
-                --data-urlencode "commandId=${COMMAND_ID}" \
-                --data-urlencode "output=${line}
-" \
-                --data-urlencode "isEof=false" > /dev/null
+              BATCH="${BATCH}${line}
+"
+              BATCH_LINES=$((BATCH_LINES + 1))
+              BATCH_LEN=${#BATCH}
+              if [ "$BATCH_LINES" -ge "$BATCH_LINES_MAX" ] || [ "$BATCH_LEN" -ge "$BATCH_BYTES_MAX" ]; then
+                flush_batch
+              fi
             done
+            flush_batch
             break
           else
+            # Process still running but no new output — flush partial batch and wait
+            flush_batch
             sleep 0.1
           fi
         done
